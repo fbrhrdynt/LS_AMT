@@ -1,0 +1,11 @@
+AMT VPS Self-Hosted Patch
+
+Changes:
+- Removed Google/Emergent login flow and session-token authentication.
+- Email/password JWT login remains.
+- Changed auth cookies to SameSite=Lax for same-origin production deployment.
+- Replaced Emergent object storage with private local VPS storage via STORAGE_ROOT.
+- Default storage directory: /opt/amt/storage
+- Removed Emergent/Google/LLM runtime dependencies from backend requirements.
+- Updated admin source backup path to detect /opt/amt automatically.
+- Existing database file metadata is preserved; old remote file bytes must be migrated or re-uploaded.
