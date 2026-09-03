@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 from auth import get_current_user, require_roles
 from core import audit_log, db
 from pdf_report import build_maintenance_pdf
+from storage import get_object
 from public_access import (
     ensure_equipment_public_token,
     public_equipment_url,
@@ -605,12 +606,41 @@ async def public_equipment(token: str):
         PUBLIC_MAINTENANCE_FIELDS,
     ).sort("maintenance_date", -1).to_list(1000)
 
+    # Only documents attached to CLOSED maintenance records are public.
+    # Equipment-level legacy/unassigned files and Open-maintenance files are
+    # intentionally excluded.
+    maintenance_ids = [
+        item["id"]
+        for item in maintenance
+        if item.get("id")
+    ]
+    documents = []
+    if maintenance_ids:
+        documents = await db.files.find(
+            {
+                "maintenance_id": {"$in": maintenance_ids},
+                "is_deleted": False,
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "maintenance_id": 1,
+                "original_filename": 1,
+                "content_type": 1,
+                "size": 1,
+                "doc_type": 1,
+                "created_at": 1,
+            },
+        ).sort("created_at", 1).to_list(5000)
+
     return Response(
         content=__import__("json").dumps(
             {
                 "equipment": public_eq,
                 "maintenance": maintenance,
                 "maintenance_count": len(maintenance),
+                "documents": documents,
+                "document_count": len(documents),
             },
             default=str,
         ),
@@ -620,6 +650,93 @@ async def public_equipment(token: str):
             "X-Robots-Tag": (
                 "noindex, nofollow, noarchive"
             ),
+        },
+    )
+
+
+
+@router.get("/public/equipment/{token}/files/{file_id}")
+async def public_maintenance_document(
+    token: str,
+    file_id: str,
+):
+    """
+    Serve a maintenance attachment through the public Equipment Passport.
+
+    Access is granted only when:
+    - the QR/public token resolves to the equipment;
+    - the file is active and has a maintenance_id;
+    - that maintenance belongs to the same equipment;
+    - that maintenance is Closed.
+    """
+    eq = await _equipment_by_public_token(token)
+    if not eq:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    file_rec = await db.files.find_one(
+        {
+            "id": file_id,
+            "is_deleted": False,
+            "maintenance_id": {"$nin": [None, ""]},
+        },
+        {"_id": 0},
+    )
+    if not file_rec:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    maintenance = await db.maintenance.find_one(
+        {
+            "id": file_rec.get("maintenance_id"),
+            "equipment_id": eq["id"],
+            "status": "Closed",
+        },
+        {
+            "_id": 0,
+            "id": 1,
+        },
+    )
+    if not maintenance:
+        # Same response for wrong equipment, Open maintenance, or revoked file.
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    try:
+        data, detected_type = get_object(
+            file_rec["storage_path"]
+        )
+    except (FileNotFoundError, ValueError, KeyError):
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    filename = _safe_filename(
+        file_rec.get("original_filename") or "document"
+    )
+    content_type = (
+        file_rec.get("content_type")
+        or detected_type
+        or "application/octet-stream"
+    )
+
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{filename}"'
+            ),
+            "Cache-Control": "no-store, max-age=0",
+            "X-Robots-Tag": "noindex, nofollow, noarchive",
+            "X-Content-Type-Options": "nosniff",
         },
     )
 
