@@ -202,12 +202,15 @@ def build_maintenance_pdf(
             ])
 
         if purchase_parts:
+            # Put the label in the first cell, then span columns 0..4.
+            # This gives PURCHASE TOTAL enough width and keeps the amount
+            # isolated in the Purchase Cost column.
             data.append([
+                Paragraph("<b>PURCHASE TOTAL</b>", ss["Small"]),
                 "",
                 "",
                 "",
                 "",
-                "PURCHASE TOTAL",
                 _paragraph(money(purchase_total), ss["Small"]),
             ])
 
@@ -242,8 +245,13 @@ def build_maintenance_pdf(
 
         if purchase_parts:
             table_style.extend([
+                ("SPAN", (0, -1), (4, -1)),
                 ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#EFF6FF")),
-                ("FONTNAME", (4, -1), (-1, -1), "Helvetica-Bold"),
+                ("ALIGN", (0, -1), (4, -1), "RIGHT"),
+                ("VALIGN", (0, -1), (-1, -1), "MIDDLE"),
+                ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+                ("TOPPADDING", (0, -1), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, -1), (-1, -1), 5),
             ])
 
         t.setStyle(TableStyle(table_style))
