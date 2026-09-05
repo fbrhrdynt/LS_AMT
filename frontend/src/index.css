@@ -1,11 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
     margin: 0;
-    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-family:
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Arial,
+        sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background: #F8FAFC;
@@ -40,24 +45,60 @@ body {
     * {
         @apply border-border;
     }
+
     body {
         @apply bg-background text-foreground;
     }
-    h1, h2, h3, h4 {
-        font-family: 'Chivo', sans-serif;
+
+    h1,
+    h2,
+    h3,
+    h4 {
+        font-family:
+            system-ui,
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            Arial,
+            sans-serif;
     }
-    .font-mono, .tabular {
-        font-family: 'IBM Plex Mono', monospace;
+
+    .font-mono,
+    .tabular {
+        font-family:
+            ui-monospace,
+            SFMono-Regular,
+            Menlo,
+            Monaco,
+            Consolas,
+            "Liberation Mono",
+            "Courier New",
+            monospace;
         font-variant-numeric: tabular-nums;
     }
 }
 
 /* thin scrollbar */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
 
 @media print {
-    .no-print { display: none !important; }
-    body { background: #fff; }
+    .no-print {
+        display: none !important;
+    }
+
+    body {
+        background: #fff;
+    }
 }
