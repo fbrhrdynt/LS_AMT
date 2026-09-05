@@ -19,7 +19,6 @@ import {
 import { api } from "@/lib/api";
 import { useAuth, canManage, isAdmin } from "@/context/AuthContext";
 import { RoleBadge, StatusBadge } from "@/components/StatusBadge";
-import ExportButtons from "@/components/ExportButtons";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -35,18 +34,6 @@ const NAV = [
   { to: "/users", label: "Users", icon: Users, key: "usr", admin: true },
   { to: "/settings", label: "Settings", icon: Settings, key: "set", admin: true },
 ];
-
-function exportDataset(pathname) {
-  if (pathname === "/") return "dashboard";
-  if (pathname === "/equipment") return "equipment";
-  if (pathname === "/maintenance") return "maintenance";
-  if (pathname === "/inventory") return "inventory";
-  if (pathname === "/clients") return "clients";
-  if (pathname === "/jobs") return "jobs";
-  if (pathname === "/audit") return "audit";
-  if (pathname === "/users") return "users";
-  return null;
-}
 
 function GlobalSearch() {
   const [q, setQ] = useState("");
@@ -181,7 +168,6 @@ export default function AppLayout({ children }) {
   const items = NAV.filter(
     (n) => (!n.admin || isAdmin(user)) && (!n.manage || canManage(user))
   );
-  const dataset = exportDataset(loc.pathname);
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -192,12 +178,12 @@ export default function AppLayout({ children }) {
         )}
       >
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <div className="flex items-center gap-2.5">
-            <img src="/amt-logo.webp" alt="AMT" className="h-9 w-auto object-contain" />
-            <div className="leading-tight">
-              <div className="font-heading text-base font-extrabold tracking-tight text-slate-900">AMT</div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">Asset Maintenance Tracker</div>
-            </div>
+          <div className="min-w-0 flex-1">
+            <img
+              src="/amt-mark.png"
+              alt="AMT - Asset Maintenance Tracker"
+              className="h-auto w-[180px] max-w-full object-contain object-left"
+            />
           </div>
           <button className="lg:hidden" type="button" onClick={() => setMobileOpen(false)}>
             <X className="h-5 w-5" />
@@ -254,7 +240,6 @@ export default function AppLayout({ children }) {
             <Menu className="h-5 w-5" />
           </button>
           <GlobalSearch />
-          {dataset && <ExportButtons dataset={dataset} compact />}
           <div className="ml-auto hidden items-center gap-2 text-xs text-slate-400 xl:flex">
             <span>by</span>
             <img src="/logisource-light.webp" alt="LogiSource Digital" className="h-5 w-auto object-contain opacity-70" />

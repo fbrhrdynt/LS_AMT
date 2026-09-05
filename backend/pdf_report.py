@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from xml.sax.saxutils import escape
@@ -8,7 +9,12 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle,
+    Image as RLImage,
 )
 
 ACCENT = colors.HexColor("#2563EB")
@@ -16,6 +22,9 @@ DARK = colors.HexColor("#0F172A")
 MUTED = colors.HexColor("#64748B")
 LIGHT = colors.HexColor("#F1F5F9")
 WARNING = colors.HexColor("#B45309")
+
+ASSET_DIR = Path(__file__).resolve().parent / "assets"
+AMT_MARK_TAGLINE = ASSET_DIR / "amt-mark-tagline.png"
 
 
 def _styles():
@@ -139,15 +148,27 @@ def build_maintenance_pdf(
     ss = _styles()
     el = []
 
-    el.append(Paragraph(
-        "AMT — Asset Maintenance Tracker",
-        ss["Brand"]
-    ))
-    el.append(Paragraph(
-        "Track Every Asset. Know Every Maintenance History.  |  "
-        "A LogiSource Digital product",
-        ss["Sub"],
-    ))
+    if AMT_MARK_TAGLINE.exists():
+        logo_width = 72 * mm
+        logo_height = logo_width * (835 / 1883)
+        el.append(
+            RLImage(
+                str(AMT_MARK_TAGLINE),
+                width=logo_width,
+                height=logo_height,
+            )
+        )
+        el.append(Spacer(1, 3 * mm))
+    else:
+        # Safe fallback if the asset was not deployed.
+        el.append(Paragraph(
+            "AMT - Asset Maintenance Tracker",
+            ss["Brand"]
+        ))
+        el.append(Paragraph(
+            "Track Every Asset. Know Every Maintenance History.",
+            ss["Sub"],
+        ))
     el.append(Paragraph(
         f"Maintenance Report — {_safe(mnt.get('mnt_no', ''))}",
         ss["H"],

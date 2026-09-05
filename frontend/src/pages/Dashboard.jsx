@@ -15,7 +15,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { Panel, EmptyState } from "@/components/Bits";
+import { PageHeader, Panel, EmptyState } from "@/components/Bits";
 import { StatusBadge } from "@/components/StatusBadge";
 import { fmtDate } from "@/lib/helpers";
 
@@ -61,14 +61,10 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-          Dashboard
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Maintenance operations at a glance
-        </p>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        subtitle="Maintenance operations at a glance"
+      />
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         <Stat
