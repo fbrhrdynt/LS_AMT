@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/dialog";
 import MaintenanceDialog from "@/components/MaintenanceDialog";
 import MaintenanceDocuments from "@/components/MaintenanceDocuments";
+import JobLocationFields from "@/components/JobLocationFields";
 
 
 function MntCard({
@@ -277,6 +278,56 @@ function MntCard({
 }
 
 
+function equipmentLocationLabel(
+  equipment,
+  assignments = [],
+  jobs = []
+) {
+  if (!equipment) return "—";
+
+  const placement = equipment.placement || "Base";
+  const detail = (equipment.placement_detail || "").trim();
+
+  if (placement === "Job") {
+    const activeAssignment = assignments.find(
+      (item) => item.status === "Active"
+    );
+
+    const jobId =
+      equipment.current_job_id ||
+      activeAssignment?.job_id;
+
+    const job = jobs.find(
+      (item) => item.id === jobId
+    );
+
+    const client =
+      job?.client_name ||
+      activeAssignment?.client_name ||
+      "";
+
+    const site = job?.site_location || "";
+
+    return [
+      "Job",
+      client,
+      site,
+    ]
+      .filter(Boolean)
+      .join(" - ");
+  }
+
+  if (
+    !detail ||
+    detail.toLowerCase() === placement.toLowerCase()
+  ) {
+    return placement;
+  }
+
+  return `${placement} - ${detail}`;
+}
+
+
 export default function EquipmentDetail() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -288,8 +339,14 @@ export default function EquipmentDetail() {
   const [closeTarget, setCloseTarget] = useState(null);
   const [moveDlg, setMoveDlg] = useState(false);
   const [movePlacement, setMovePlacement] =
-    useState("Workshop");
+    useState("Base");
   const [moveReason, setMoveReason] = useState("");
+  const [jobs, setJobs] = useState([]);
+  const [moveJob, setMoveJob] = useState({
+    job_id: "",
+    client_id: "",
+    site_location: "",
+  });
 
   const load = useCallback(async () => {
     const { data } = await api.get(`/equipment/${id}`);
@@ -299,6 +356,49 @@ export default function EquipmentDetail() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    api
+      .get("/jobs")
+      .then((response) => setJobs(response.data || []))
+      .catch(() => setJobs([]));
+  }, []);
+
+  const openMoveDialog = () => {
+    const equipment = data?.equipment;
+    const assignments = data?.assignments || [];
+    const activeAssignment = assignments.find(
+      (item) => item.status === "Active"
+    );
+
+    const currentJobId =
+      equipment?.current_job_id ||
+      activeAssignment?.job_id ||
+      "";
+
+    const currentJob = jobs.find(
+      (item) => item.id === currentJobId
+    );
+
+    setMovePlacement(
+      equipment?.placement === "Job"
+        ? "Job"
+        : "Base"
+    );
+
+    setMoveJob({
+      job_id: currentJobId,
+      client_id:
+        currentJob?.client_id ||
+        activeAssignment?.client_id ||
+        "",
+      site_location:
+        currentJob?.site_location || "",
+    });
+
+    setMoveReason("");
+    setMoveDlg(true);
+  };
 
   const reopen = async (m) => {
     try {
@@ -333,16 +433,67 @@ export default function EquipmentDetail() {
   };
 
   const doMove = async () => {
+    const activeAssignment = (
+      data?.assignments || []
+    ).find((item) => item.status === "Active");
+
     try {
-      await api.post(`/equipment/${id}/move`, {
-        placement: movePlacement,
-        placement_detail: movePlacement,
-        reason: moveReason,
-      });
-      toast.success("Location updated");
+      if (movePlacement === "Base") {
+        if (activeAssignment) {
+          await api.post(
+            `/assignments/${activeAssignment.id}/demobilize`,
+            {
+              return_placement: "Base",
+            }
+          );
+        } else {
+          await api.post(`/equipment/${id}/move`, {
+            placement: "Base",
+            placement_detail: "Base",
+            reason: moveReason,
+          });
+        }
+
+        toast.success("Equipment moved to Base");
+      } else {
+        if (!moveJob.job_id) {
+          toast.error("Select a Job first");
+          return;
+        }
+
+        if (
+          activeAssignment?.job_id ===
+          moveJob.job_id
+        ) {
+          toast.info(
+            "Equipment is already assigned to this Job"
+          );
+          setMoveDlg(false);
+          return;
+        }
+
+        if (activeAssignment) {
+          await api.post(
+            `/assignments/${activeAssignment.id}/demobilize`,
+            {
+              return_placement: "Base",
+            }
+          );
+        }
+
+        await api.post(
+          `/jobs/${moveJob.job_id}/assign`,
+          {
+            equipment_id: id,
+          }
+        );
+
+        toast.success("Equipment assigned to Job");
+      }
+
       setMoveDlg(false);
       setMoveReason("");
-      load();
+      await load();
     } catch (e) {
       toast.error(
         formatApiError(e.response?.data?.detail)
@@ -368,6 +519,12 @@ export default function EquipmentDetail() {
     documents = [],
     parts_consumption = [],
   } = data;
+
+  const currentLocation = equipmentLocationLabel(
+    eq,
+    assignments,
+    jobs
+  );
 
   const documentsByMaintenance = documents.reduce(
     (acc, file) => {
@@ -419,7 +576,7 @@ export default function EquipmentDetail() {
         {canManage(user) && (
           <Btn
             variant="outline"
-            onClick={() => setMoveDlg(true)}
+            onClick={openMoveDialog}
             data-testid="move-btn"
           >
             <Move className="h-4 w-4" />
@@ -443,14 +600,11 @@ export default function EquipmentDetail() {
           <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             Current Location
           </div>
-          <div className="mt-1 flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-blue-600" />
+          <div className="mt-1 flex items-start gap-2">
+            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
             <span className="font-semibold text-slate-900">
-              {eq.placement}
+              {currentLocation}
             </span>
-          </div>
-          <div className="font-mono text-xs text-slate-500">
-            {eq.placement_detail}
           </div>
         </Panel>
 
@@ -562,10 +716,8 @@ export default function EquipmentDetail() {
                   value={eq.physical_condition}
                 />
                 <Field
-                  label="Placement"
-                  value={`${eq.placement} — ${
-                    eq.placement_detail || ""
-                  }`}
+                  label="Current Location"
+                  value={currentLocation}
                 />
                 <Field
                   label="Operational Status"
@@ -954,32 +1106,50 @@ export default function EquipmentDetail() {
           </p>
 
           <SelectInput
-            label="New Placement"
+            label="New Location"
             value={movePlacement}
-            onChange={(e) =>
-              setMovePlacement(e.target.value)
-            }
+            onChange={(e) => {
+              const next = e.target.value;
+              setMovePlacement(next);
+
+              if (next === "Base") {
+                setMoveJob({
+                  job_id: "",
+                  client_id: "",
+                  site_location: "",
+                });
+              }
+            }}
             data-testid="move-placement"
           >
             <option>Base</option>
-            <option>Workshop</option>
-            <option>Transit</option>
+            <option>Job</option>
           </SelectInput>
 
-          <p className="text-xs text-slate-400">
-            To place equipment on a Job, assign it from the Job
-            page (this creates a proper assignment).
-          </p>
+          {movePlacement === "Job" && (
+            <JobLocationFields
+              jobs={jobs}
+              value={moveJob}
+              onChange={setMoveJob}
+            />
+          )}
 
-          <input
-            placeholder="Reason (optional)"
-            value={moveReason}
-            onChange={(e) =>
-              setMoveReason(e.target.value)
-            }
-            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-            data-testid="move-reason"
-          />
+          {movePlacement === "Base" && (
+            <input
+              placeholder="Reason (optional)"
+              value={moveReason}
+              onChange={(e) =>
+                setMoveReason(e.target.value)
+              }
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              data-testid="move-reason"
+            />
+          )}
+
+          <p className="text-xs leading-5 text-slate-400">
+            Job location uses the existing assignment workflow,
+            so Job, Client, Site, and assignment history stay synchronized.
+          </p>
 
           <DialogFooter>
             <Btn

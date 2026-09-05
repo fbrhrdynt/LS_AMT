@@ -375,11 +375,9 @@ export default function PublicEquipment() {
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
                 <span className="break-words">
                   {valueOrDash(
-                    equipment.placement
+                    equipment.current_location ||
+                      equipment.placement
                   )}
-                  {equipment.placement_detail
-                    ? ` — ${equipment.placement_detail}`
-                    : ""}
                 </span>
               </div>
             </div>

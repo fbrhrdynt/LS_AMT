@@ -606,6 +606,43 @@ async def delete_maintenance(mid: str, user: dict = Depends(MANAGE)):
     return {"ok": True}
 
 
+async def _equipment_current_location(eq: dict) -> str:
+    placement = str(eq.get("placement") or "Base").strip()
+    detail = str(eq.get("placement_detail") or "").strip()
+
+    if placement != "Job":
+        if not detail or detail.lower() == placement.lower():
+            return placement
+        return f"{placement} - {detail}"
+
+    job_id = eq.get("current_job_id")
+    if not job_id:
+        active = await db.assignments.find_one({
+            "equipment_id": eq.get("id"),
+            "status": "Active",
+        })
+        job_id = active.get("job_id") if active else None
+
+    job = (
+        await db.jobs.find_one({"id": job_id})
+        if job_id
+        else None
+    )
+
+    if not job:
+        return "Job"
+
+    return " - ".join(
+        part
+        for part in [
+            "Job",
+            job.get("client_name") or "",
+            job.get("site_location") or "",
+        ]
+        if part
+    )
+
+
 @router.get("/maintenance/{mid}/report.pdf")
 async def maintenance_pdf(
     mid: str,
@@ -624,6 +661,11 @@ async def maintenance_pdf(
     eq = await db.equipment.find_one(
         {"id": m["equipment_id"]}, {"_id": 0}
     ) or {}
+    if eq:
+        eq["current_location"] = (
+            await _equipment_current_location(eq)
+        )
+
     settings = await db.settings.find_one({"_id": "app"}) or {}
     currency = settings.get("currency", "USD")
     pdf = build_maintenance_pdf(m, eq, currency)

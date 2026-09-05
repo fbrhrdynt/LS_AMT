@@ -87,6 +87,20 @@ def _is_purchase(part):
     return (part.get("supply_source") or "Ex-Stock") == "Purchase"
 
 
+def _location_label(equipment):
+    current = str(equipment.get("current_location") or "").strip()
+    if current:
+        return current
+
+    placement = str(equipment.get("placement") or "-").strip()
+    detail = str(equipment.get("placement_detail") or "").strip()
+
+    if not detail or detail.lower() == placement.lower():
+        return placement
+
+    return f"{placement} - {detail}"
+
+
 def build_maintenance_pdf(
     mnt: dict,
     equipment: dict,
@@ -130,8 +144,7 @@ def build_maintenance_pdf(
         ("Manufacturer", equipment.get("manufacturer")),
         (
             "Current Location",
-            f"{equipment.get('placement') or '-'} — "
-            f"{equipment.get('placement_detail') or ''}",
+            _location_label(equipment),
         ),
         ("Operational Status", equipment.get("operational_status")),
     ], ss))

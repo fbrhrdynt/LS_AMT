@@ -21,6 +21,7 @@ import {
 } from "@/components/Bits";
 import { StatusBadge } from "@/components/StatusBadge";
 import EquipmentQRDialog from "@/components/EquipmentQRDialog";
+import JobLocationFields from "@/components/JobLocationFields";
 import {
   Dialog,
   DialogContent,
@@ -29,7 +30,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-const PLACEMENTS = ["Base", "Workshop", "Job", "Transit"];
+const FILTER_PLACEMENTS = [
+  "Base",
+  "Workshop",
+  "Job",
+  "Transit",
+];
+const NEW_LOCATIONS = ["Base", "Job"];
 const STATUSES = [
   "Operational",
   "Under Maintenance",
@@ -57,6 +64,7 @@ export default function EquipmentList() {
   const [dialog, setDialog] = useState(false);
   const [editing, setEditing] = useState(null);
   const [qrEquipment, setQrEquipment] = useState(null);
+  const [jobs, setJobs] = useState([]);
 
   const EMPTY = {
     sap_no: "",
@@ -65,6 +73,9 @@ export default function EquipmentList() {
     category: "",
     manufacturer: "",
     placement: "Base",
+    job_id: "",
+    client_id: "",
+    site_location: "",
     operational_status: "Operational",
   };
   const [form, setForm] = useState(EMPTY);
@@ -88,6 +99,13 @@ export default function EquipmentList() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    api
+      .get("/jobs")
+      .then((response) => setJobs(response.data || []))
+      .catch(() => setJobs([]));
+  }, []);
+
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY);
@@ -103,6 +121,9 @@ export default function EquipmentList() {
       category: e.category || "",
       manufacturer: e.manufacturer || "",
       placement: e.placement || "Base",
+      job_id: "",
+      client_id: "",
+      site_location: "",
       operational_status:
         e.operational_status || "Operational",
     });
@@ -115,27 +136,78 @@ export default function EquipmentList() {
       return;
     }
 
+    if (
+      !editing &&
+      form.placement === "Job" &&
+      !form.job_id
+    ) {
+      toast.error("Select a Job for the initial location");
+      return;
+    }
+
     try {
       if (editing) {
+        // Metadata edit must not silently change location or erase
+        // fields that are not shown in this compact dialog.
         await api.put(`/equipment/${editing.id}`, {
-          ...form,
-          placement_detail: form.placement,
+          sap_no: form.sap_no,
+          mfg_no: form.mfg_no,
+          name: form.name,
+          category: form.category,
+          manufacturer: form.manufacturer,
+          date_of_purchase:
+            editing.date_of_purchase || null,
+          physical_condition:
+            editing.physical_condition || "",
+          placement:
+            editing.placement || "Base",
+          placement_detail:
+            editing.placement_detail ||
+            editing.placement ||
+            "Base",
+          operational_status:
+            form.operational_status,
         });
+
+        toast.success("Equipment updated");
       } else {
-        await api.post("/equipment", {
-          ...form,
-          placement_detail: form.placement,
-        });
+        // New equipment is first registered at Base. If Job was
+        // selected, use the existing assignment API immediately after
+        // creation so assignment/location history stays consistent.
+        const { data: created } = await api.post(
+          "/equipment",
+          {
+            sap_no: form.sap_no,
+            mfg_no: form.mfg_no,
+            name: form.name,
+            category: form.category,
+            manufacturer: form.manufacturer,
+            placement: "Base",
+            placement_detail: "Base",
+            operational_status:
+              form.operational_status,
+          }
+        );
+
+        if (form.placement === "Job") {
+          await api.post(
+            `/jobs/${form.job_id}/assign`,
+            {
+              equipment_id: created.id,
+            }
+          );
+        }
+
+        toast.success("Equipment created");
       }
 
-      toast.success(
-        editing ? "Equipment updated" : "Equipment created"
-      );
       setDialog(false);
       setForm(EMPTY);
       load();
     } catch (e) {
-      toast.error(formatApiError(e.response?.data?.detail));
+      toast.error(
+        formatApiError(e.response?.data?.detail)
+      );
     }
   };
 
@@ -202,7 +274,7 @@ export default function EquipmentList() {
           data-testid="filter-placement"
         >
           <option value="">All Placements</option>
-          {PLACEMENTS.map((p) => (
+          {FILTER_PLACEMENTS.map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
@@ -420,20 +492,58 @@ export default function EquipmentList() {
               }
             />
 
-            <SelectInput
-              label="Placement"
-              value={form.placement}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  placement: e.target.value,
-                })
-              }
-            >
-              {PLACEMENTS.map((p) => (
-                <option key={p}>{p}</option>
-              ))}
-            </SelectInput>
+            {!editing && (
+              <SelectInput
+                label="Initial Location"
+                value={form.placement}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    placement: e.target.value,
+                    job_id: "",
+                    client_id: "",
+                    site_location: "",
+                  })
+                }
+              >
+                {NEW_LOCATIONS.map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </SelectInput>
+            )}
+
+            {editing && (
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Current Location
+                </div>
+                <div className="mt-1 text-sm font-medium text-slate-700">
+                  {editing.placement || "Base"}
+                </div>
+                <div className="mt-1 text-xs leading-4 text-slate-400">
+                  Use Equipment Detail → Change Location to move this asset.
+                </div>
+              </div>
+            )}
+
+            {!editing && form.placement === "Job" && (
+              <div className="sm:col-span-2">
+                <JobLocationFields
+                  jobs={jobs}
+                  value={{
+                    job_id: form.job_id,
+                    client_id: form.client_id,
+                    site_location: form.site_location,
+                  }}
+                  onChange={(next) =>
+                    setForm({
+                      ...form,
+                      ...next,
+                    })
+                  }
+                />
+              </div>
+            )}
 
             <SelectInput
               label="Operational Status"

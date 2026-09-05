@@ -366,6 +366,43 @@ def _qr_sticker_png(
     return buf.read()
 
 
+async def _public_location_label(eq: dict) -> str:
+    placement = str(eq.get("placement") or "Base").strip()
+    detail = str(eq.get("placement_detail") or "").strip()
+
+    if placement != "Job":
+        if not detail or detail.lower() == placement.lower():
+            return placement
+        return f"{placement} - {detail}"
+
+    job_id = eq.get("current_job_id")
+    if not job_id:
+        active = await db.assignments.find_one({
+            "equipment_id": eq.get("id"),
+            "status": "Active",
+        })
+        job_id = active.get("job_id") if active else None
+
+    job = (
+        await db.jobs.find_one({"id": job_id})
+        if job_id
+        else None
+    )
+
+    if not job:
+        return "Job"
+
+    return " - ".join(
+        part
+        for part in [
+            "Job",
+            job.get("client_name") or "",
+            job.get("site_location") or "",
+        ]
+        if part
+    )
+
+
 async def _equipment_by_public_token(token: str):
     if not token or len(token) < 20 or len(token) > 200:
         return None
@@ -597,6 +634,9 @@ async def public_equipment(token: str):
         for key in PUBLIC_EQUIPMENT_FIELDS
         if key != "_id"
     }
+    public_eq["current_location"] = (
+        await _public_location_label(eq)
+    )
 
     maintenance = await db.maintenance.find(
         {
@@ -768,6 +808,10 @@ async def public_maintenance_pdf(
             status_code=404,
             detail="Maintenance report not found",
         )
+
+    eq["current_location"] = (
+        await _public_location_label(eq)
+    )
 
     settings = (
         await db.settings.find_one({"_id": "app"})
