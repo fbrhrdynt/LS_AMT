@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 import re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -11,12 +12,22 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
+from reportlab.platypus import (
+    Image as RLImage,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 from auth import get_current_user
 from core import db
 
 router = APIRouter(prefix="/api")
+
+ASSET_DIR = Path(__file__).resolve().parent / "assets"
+AMT_MARK_TAGLINE = ASSET_DIR / "amt-mark-tagline.png"
 
 
 def _status_label(value):
@@ -293,46 +304,209 @@ def _xlsx_bytes(title, headers, rows):
 def _pdf_bytes(title, headers, rows, timezone_name):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
-        buf, pagesize=landscape(A4), leftMargin=10 * mm, rightMargin=10 * mm,
-        topMargin=12 * mm, bottomMargin=12 * mm,
+        buf,
+        pagesize=landscape(A4),
+        leftMargin=10 * mm,
+        rightMargin=10 * mm,
+        topMargin=10 * mm,
+        bottomMargin=12 * mm,
     )
+
     styles = getSampleStyleSheet()
+
     title_style = ParagraphStyle(
-        "ExportTitle", parent=styles["Heading1"], fontSize=15, leading=18,
-        textColor=colors.HexColor("#0F172A"), spaceAfter=4,
+        "ExportTitle",
+        parent=styles["Heading1"],
+        fontSize=15,
+        leading=17,
+        textColor=colors.HexColor("#0F172A"),
+        spaceAfter=2,
     )
+
     sub_style = ParagraphStyle(
-        "ExportSub", parent=styles["Normal"], fontSize=7,
-        textColor=colors.HexColor("#64748B"), spaceAfter=8,
+        "ExportSub",
+        parent=styles["Normal"],
+        fontSize=7,
+        leading=9,
+        textColor=colors.HexColor("#64748B"),
+        spaceAfter=0,
     )
+
     cell_style = ParagraphStyle(
-        "ExportCell", parent=styles["Normal"], fontSize=6.2, leading=7.5,
+        "ExportCell",
+        parent=styles["Normal"],
+        fontSize=6.2,
+        leading=7.5,
         textColor=colors.HexColor("#0F172A"),
     )
+
     head_style = ParagraphStyle(
-        "ExportHead", parent=cell_style, textColor=colors.white,
+        "ExportHead",
+        parent=cell_style,
+        textColor=colors.white,
         fontName="Helvetica-Bold",
     )
+
     generated = _local_now(timezone_name)
-    story = [
-        Paragraph(f"AMT - {escape(title)} Export", title_style),
-        Paragraph(f"Generated {generated.strftime('%Y-%m-%d %H:%M %Z')} - {len(rows)} record(s)", sub_style),
+
+    title_block = [
+        Paragraph(
+            f"AMT - {escape(title)} Export",
+            title_style,
+        ),
+        Paragraph(
+            (
+                f"Generated "
+                f"{generated.strftime('%Y-%m-%d %H:%M %Z')} "
+                f"- {len(rows)} record(s)"
+            ),
+            sub_style,
+        ),
     ]
-    data = [[Paragraph(_safe_pdf(v), head_style) for v in headers]]
-    data.extend([[Paragraph(_safe_pdf(v), cell_style) for v in row] for row in rows])
+
+    if AMT_MARK_TAGLINE.exists():
+        logo_width = 40 * mm
+        logo_height = logo_width * (835 / 1883)
+        logo = RLImage(
+            str(AMT_MARK_TAGLINE),
+            width=logo_width,
+            height=logo_height,
+        )
+        logo.hAlign = "RIGHT"
+        logo_cell = logo
+    else:
+        logo_cell = Paragraph(
+            "AMT",
+            ParagraphStyle(
+                "ExportLogoFallback",
+                parent=styles["Normal"],
+                fontSize=12,
+                textColor=colors.HexColor("#2563EB"),
+                alignment=2,
+            ),
+        )
+
+    # One header row keeps the title/generated block and AMT logo
+    # vertically aligned. The data table begins immediately below it.
+    header_table = Table(
+        [[title_block, logo_cell]],
+        colWidths=[225 * mm, 52 * mm],
+    )
+    header_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+
+    story = [
+        header_table,
+        Spacer(1, 4 * mm),
+    ]
+
+    data = [
+        [
+            Paragraph(
+                _safe_pdf(value),
+                head_style,
+            )
+            for value in headers
+        ]
+    ]
+
+    data.extend(
+        [
+            [
+                Paragraph(
+                    _safe_pdf(value),
+                    cell_style,
+                )
+                for value in row
+            ]
+            for row in rows
+        ]
+    )
+
     available_width = 277 * mm
-    widths = [available_width / max(1, len(headers))] * max(1, len(headers))
-    table = Table(data, colWidths=widths, repeatRows=1)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F172A")),
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-        ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-    ]))
+    count = max(1, len(headers))
+    widths = [
+        available_width / count
+    ] * count
+
+    table = Table(
+        data,
+        colWidths=widths,
+        repeatRows=1,
+    )
+
+    table.setStyle(
+        TableStyle(
+            [
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, 0),
+                    colors.HexColor("#0F172A"),
+                ),
+                (
+                    "GRID",
+                    (0, 0),
+                    (-1, -1),
+                    0.35,
+                    colors.HexColor("#CBD5E1"),
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "TOP",
+                ),
+                (
+                    "ROWBACKGROUNDS",
+                    (0, 1),
+                    (-1, -1),
+                    [
+                        colors.white,
+                        colors.HexColor("#F8FAFC"),
+                    ],
+                ),
+                (
+                    "LEFTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    2,
+                ),
+                (
+                    "RIGHTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    2,
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    2,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    2,
+                ),
+            ]
+        )
+    )
+
     story.append(table)
     doc.build(story)
+
     buf.seek(0)
     return buf.read()
 

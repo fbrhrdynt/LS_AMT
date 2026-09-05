@@ -149,16 +149,18 @@ def build_maintenance_pdf(
     el = []
 
     if AMT_MARK_TAGLINE.exists():
-        logo_width = 72 * mm
+        # Compact brand mark: keep the report header visible without
+        # consuming excessive vertical space on A4.
+        logo_width = 44 * mm
         logo_height = logo_width * (835 / 1883)
-        el.append(
-            RLImage(
-                str(AMT_MARK_TAGLINE),
-                width=logo_width,
-                height=logo_height,
-            )
+        logo = RLImage(
+            str(AMT_MARK_TAGLINE),
+            width=logo_width,
+            height=logo_height,
         )
-        el.append(Spacer(1, 3 * mm))
+        logo.hAlign = "CENTER"
+        el.append(logo)
+        el.append(Spacer(1, 1.5 * mm))
     else:
         # Safe fallback if the asset was not deployed.
         el.append(Paragraph(
