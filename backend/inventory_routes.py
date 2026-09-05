@@ -1,3 +1,4 @@
+import re
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from pymongo import ReturnDocument
@@ -31,14 +32,14 @@ async def list_inventory(q: str = "", type: str = "", low: str = "",
                          user: dict = Depends(get_current_user)):
     query = {}
     if q:
-        query["$or"] = [{"item_code": {"$regex": q, "$options": "i"}},
-                        {"item_name": {"$regex": q, "$options": "i"}},
-                        {"part_number": {"$regex": q, "$options": "i"}}]
+        query["$or"] = [{"item_code": {"$regex": re.escape(q), "$options": "i"}},
+                        {"item_name": {"$regex": re.escape(q), "$options": "i"}},
+                        {"part_number": {"$regex": re.escape(q), "$options": "i"}}]
     if type:
         query["type"] = type
     if str(low).lower() in ("true", "1", "yes"):
         query["$expr"] = {"$lte": ["$stock", "$min_stock"]}
-    items = await db.inventory_items.find(query, {"_id": 0}).sort("item_code", 1).to_list(2000)
+    items = await db.inventory_items.find(query, {"_id": 0}).sort("item_code", 1).to_list(1000)
     return items
 
 

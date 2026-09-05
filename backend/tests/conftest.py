@@ -1,16 +1,23 @@
 import os
-import re
-from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 import requests
-from dotenv import dotenv_values
 
-frontend_env = dotenv_values("/app/frontend/.env")
-_base = os.environ.get("REACT_APP_BACKEND_URL") or frontend_env.get("REACT_APP_BACKEND_URL")
-if not _base:
-    raise RuntimeError("REACT_APP_BACKEND_URL missing")
-BASE_URL = _base.rstrip("/")
+PRODUCTION_HOST = "amt.logisourcedigital.web.id"
+BASE_URL = os.environ.get("AMT_TEST_BASE_URL", "").rstrip("/")
+
+if not BASE_URL:
+    raise RuntimeError(
+        "AMT_TEST_BASE_URL is required. Tests no longer fall back to the production frontend URL."
+    )
+
+host = (urlparse(BASE_URL).hostname or "").lower()
+if host == PRODUCTION_HOST and os.environ.get("AMT_ALLOW_PRODUCTION_TESTS") != "I_UNDERSTAND_THIS_MUTATES_DATA":
+    raise RuntimeError(
+        "Refusing to run integration tests against production. "
+        "Use an isolated test backend/database."
+    )
 
 
 @pytest.fixture(scope="session")
@@ -20,21 +27,23 @@ def base_url():
 
 @pytest.fixture(scope="session")
 def test_credentials():
-    p = Path("/app/memory/test_credentials.md")
-    if not p.exists():
-        pytest.skip("missing test_credentials.md")
-    c = p.read_text(encoding="utf-8")
-    e = re.search(r'(?im)^\s*(?:[-*]\s*)?(?:\*\*)?email(?:\*\*)?\s*:\s*`?([^`\s]+)', c)
-    pw = re.search(r'(?im)^\s*(?:[-*]\s*)?(?:\*\*)?password(?:\*\*)?\s*:\s*`?([^`\s]+)', c)
-    if not e or not pw:
-        pytest.skip("no creds found")
-    return {"email": e.group(1), "password": pw.group(1)}
+    email = os.environ.get("AMT_TEST_EMAIL")
+    password = os.environ.get("AMT_TEST_PASSWORD")
+    if not email or not password:
+        pytest.skip("AMT_TEST_EMAIL / AMT_TEST_PASSWORD are required")
+    return {"email": email, "password": password}
 
 
 @pytest.fixture(scope="session")
 def admin(test_credentials):
-    s = requests.Session()
-    r = s.post(f"{BASE_URL}/api/auth/login", json=test_credentials, timeout=60)
-    if r.status_code != 200:
-        pytest.fail(f"admin login failed {r.status_code}: {r.text[:300]}")
-    return s
+    session = requests.Session()
+    response = session.post(
+        f"{BASE_URL}/api/auth/login",
+        json=test_credentials,
+        timeout=60,
+    )
+    if response.status_code != 200:
+        pytest.fail(
+            f"admin login failed {response.status_code}: {response.text[:300]}"
+        )
+    return session

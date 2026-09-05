@@ -1,10 +1,16 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
 import { api, formatApiError } from "@/lib/api";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null); // null = checking, false = unauth, obj = auth
+  const [user, setUser] = useState(null);
 
   const checkAuth = useCallback(async () => {
     try {
@@ -19,6 +25,12 @@ export function AuthProvider({ children }) {
     checkAuth();
   }, [checkAuth]);
 
+  useEffect(() => {
+    const expired = () => setUser(false);
+    window.addEventListener("amt:auth-expired", expired);
+    return () => window.removeEventListener("amt:auth-expired", expired);
+  }, []);
+
   const login = async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
     setUser(data);
@@ -26,20 +38,25 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    try { await api.post("/auth/logout"); } catch {}
+    try {
+      await api.post("/auth/logout");
+    } catch {}
     setUser(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, login, logout, checkAuth }}>
+    <AuthContext.Provider
+      value={{ user, setUser, login, logout, checkAuth }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
 export const useAuth = () => useContext(AuthContext);
-
-export const canManage = (u) => u && ["admin", "supervisor"].includes(u.role);
-export const canEdit = (u) => u && ["admin", "supervisor", "technician"].includes(u.role);
-export const isAdmin = (u) => u && u.role === "admin";
+export const canManage = (user) =>
+  user && ["admin", "supervisor"].includes(user.role);
+export const canEdit = (user) =>
+  user && ["admin", "supervisor", "technician"].includes(user.role);
+export const isAdmin = (user) => user && user.role === "admin";
 export { formatApiError };

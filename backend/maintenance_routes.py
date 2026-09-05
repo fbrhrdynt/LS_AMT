@@ -9,7 +9,20 @@ from pymongo import ReturnDocument
 
 from core import db, new_id, now_iso, gen_maintenance_no, audit_log
 from auth import get_current_user, require_roles
-from storage import put_object, get_object, APP_NAME, ALLOWED_EXT, MAX_SIZE, MIME_TYPES
+from storage import (
+    put_object,
+    get_object,
+    delete_object,
+    APP_NAME,
+    ALLOWED_EXT,
+    MAX_SIZE,
+    MIME_TYPES,
+    DOCUMENT_TYPES,
+    read_upload_limited,
+    validate_file_bytes,
+    safe_original_filename,
+    content_disposition,
+)
 from pdf_report import build_maintenance_pdf
 
 router = APIRouter(prefix="/api")
@@ -341,6 +354,7 @@ async def list_maintenance(equipment_id: str = "", status: str = "", page: int =
         query["equipment_id"] = equipment_id
     if status:
         query["status"] = status
+    page_size = min(max(1, page_size), 200)
     total = await db.maintenance.count_documents(query)
     items = await db.maintenance.find(query, {"_id": 0}).sort("maintenance_date", -1)\
         .skip((max(1, page) - 1) * page_size).limit(page_size).to_list(page_size)
@@ -628,6 +642,14 @@ async def delete_maintenance(mid: str, user: dict = Depends(MANAGE)):
     if result.deleted_count != 1:
         raise HTTPException(status_code=409, detail="Maintenance changed concurrently")
     await db.failures.delete_many({"maintenance_id": mid})
+    related_files = await db.files.find(
+        {"maintenance_id": mid, "is_deleted": False}
+    ).to_list(5000)
+    for file_rec in related_files:
+        try:
+            delete_object(file_rec["storage_path"])
+        except Exception:
+            pass
     await db.files.update_many(
         {"maintenance_id": mid},
         {"$set": {"is_deleted": True, "deleted_at": now_iso(), "deleted_by": user["name"]}},
@@ -713,7 +735,10 @@ async def maintenance_pdf(
         content=pdf,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'inline; filename="{m["mnt_no"]}.pdf"'
+            "Content-Disposition": f'inline; filename="{m["mnt_no"]}.pdf"',
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
         },
     )
 
@@ -768,63 +793,82 @@ async def recurring_failures(user: dict = Depends(get_current_user)):
 @router.post("/files/upload")
 async def upload_file(
     file: UploadFile = File(...),
-    doc_type: str = Form("Document"),
-    equipment_id: str = Form(None),
-    maintenance_id: str = Form(None),
+    doc_type: str = Form("Other Document"),
+    equipment_id: str = Form(...),
+    maintenance_id: str = Form(...),
     user: dict = Depends(EDIT),
 ):
-    ext = (
-        file.filename.rsplit(".", 1)[-1].lower()
-        if "." in file.filename
-        else "bin"
-    )
+    filename = safe_original_filename(file.filename)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in ALLOWED_EXT:
         raise HTTPException(
             status_code=400,
-            detail=f"File type .{ext} not allowed"
+            detail=f"File type .{ext or 'unknown'} not allowed",
         )
 
-    data = await file.read()
-    if len(data) > MAX_SIZE:
+    normalized_type = (doc_type or "Other Document").strip() or "Other Document"
+    if normalized_type == "Document":
+        normalized_type = "Other Document"
+    if normalized_type not in DOCUMENT_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid document type")
+
+    maintenance = await db.maintenance.find_one({"id": maintenance_id})
+    if not maintenance:
+        raise HTTPException(status_code=404, detail="Maintenance not found")
+    if maintenance.get("equipment_id") != equipment_id:
         raise HTTPException(
             status_code=400,
-            detail="File exceeds 15MB limit"
+            detail="Maintenance does not belong to the selected equipment",
         )
+    if not await db.equipment.find_one({"id": equipment_id}, {"_id": 1}):
+        raise HTTPException(status_code=404, detail="Equipment not found")
 
-    content_type = MIME_TYPES.get(
-        ext,
-        file.content_type or "application/octet-stream"
-    )
-    path = f"{APP_NAME}/uploads/{user['id']}/{uuid.uuid4()}.{ext}"
-    result = put_object(path, data, content_type)
+    try:
+        data = await read_upload_limited(file, MAX_SIZE)
+        validate_file_bytes(ext, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    content_type = MIME_TYPES[ext]
+    storage_path = f"{APP_NAME}/uploads/{user['id']}/{uuid.uuid4()}.{ext}"
+    result = put_object(storage_path, data, content_type)
 
     rec = {
         "id": new_id(),
         "storage_path": result["path"],
-        "original_filename": file.filename,
+        "original_filename": filename,
         "content_type": content_type,
         "size": result.get("size", len(data)),
-        "doc_type": doc_type,
+        "doc_type": normalized_type,
         "equipment_id": equipment_id,
         "maintenance_id": maintenance_id,
         "is_deleted": False,
         "uploaded_by": user["name"],
         "created_at": now_iso(),
     }
-    await db.files.insert_one(rec)
 
-    if maintenance_id:
-        await db.maintenance.update_one(
-            {"id": maintenance_id},
-            {"$push": {"attachments": rec["id"]}}
+    try:
+        await db.files.insert_one(rec)
+        linked = await db.maintenance.update_one(
+            {"id": maintenance_id, "equipment_id": equipment_id},
+            {"$addToSet": {"attachments": rec["id"]}},
         )
+        if linked.matched_count != 1:
+            raise RuntimeError("Maintenance attachment link failed")
+    except Exception:
+        await db.files.delete_one({"id": rec["id"]})
+        try:
+            delete_object(result["path"])
+        except Exception:
+            pass
+        raise
 
     await audit_log(
         "file",
         rec["id"],
         "file.upload",
         user,
-        f"{file.filename} ({doc_type})",
+        f"{filename} ({normalized_type})",
     )
     rec.pop("_id", None)
     return rec
@@ -835,47 +879,61 @@ async def download_file(
     file_id: str,
     user: dict = Depends(get_current_user),
 ):
-
-    rec = await db.files.find_one(
-        {"id": file_id, "is_deleted": False}
-    )
+    rec = await db.files.find_one({"id": file_id, "is_deleted": False})
     if not rec:
         raise HTTPException(status_code=404, detail="File not found")
 
     try:
-        data, ct = get_object(rec["storage_path"])
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=404,
-            detail="Stored file not found on VPS"
-        )
+        data, detected_type = get_object(rec["storage_path"])
+    except (FileNotFoundError, ValueError, KeyError):
+        raise HTTPException(status_code=404, detail="Stored file not found on VPS")
 
     return Response(
         content=data,
-        media_type=rec.get("content_type", ct),
+        media_type=rec.get("content_type") or detected_type,
         headers={
-            "Content-Disposition": (
-                f'inline; filename="{rec["original_filename"]}"'
-            )
+            "Content-Disposition": content_disposition(
+                rec.get("original_filename") or "document",
+                "inline",
+            ),
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
         },
     )
 
 
 @router.delete("/files/{file_id}")
 async def delete_file(file_id: str, user: dict = Depends(EDIT)):
-    rec = await db.files.find_one({"id": file_id})
+    rec = await db.files.find_one({"id": file_id, "is_deleted": False})
     if not rec:
         raise HTTPException(status_code=404, detail="File not found")
 
     await db.files.update_one(
-        {"id": file_id},
-        {"$set": {"is_deleted": True}}
+        {"id": file_id, "is_deleted": False},
+        {
+            "$set": {
+                "is_deleted": True,
+                "deleted_at": now_iso(),
+                "deleted_by": user["name"],
+            }
+        },
     )
+    if rec.get("maintenance_id"):
+        await db.maintenance.update_one(
+            {"id": rec["maintenance_id"]},
+            {"$pull": {"attachments": file_id}},
+        )
+    try:
+        delete_object(rec["storage_path"])
+    except Exception:
+        pass
+
     await audit_log(
         "file",
         file_id,
         "file.delete",
         user,
-        rec["original_filename"],
+        rec.get("original_filename") or "Document",
     )
     return {"ok": True}

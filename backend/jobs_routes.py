@@ -1,3 +1,4 @@
+import re
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from pymongo import ReturnDocument
@@ -89,11 +90,11 @@ async def list_jobs(client_id: str = "", status: str = "", q: str = "",
         query["status"] = status
     if q:
         query["$or"] = [
-            {"job_number": {"$regex": q, "$options": "i"}},
-            {"field_name": {"$regex": q, "$options": "i"}},
-            {"job_name": {"$regex": q, "$options": "i"}},
-            {"client_name": {"$regex": q, "$options": "i"}},
-            {"site_location": {"$regex": q, "$options": "i"}},
+            {"job_number": {"$regex": re.escape(q), "$options": "i"}},
+            {"field_name": {"$regex": re.escape(q), "$options": "i"}},
+            {"job_name": {"$regex": re.escape(q), "$options": "i"}},
+            {"client_name": {"$regex": re.escape(q), "$options": "i"}},
+            {"site_location": {"$regex": re.escape(q), "$options": "i"}},
         ]
     jobs = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     for j in jobs:

@@ -51,6 +51,7 @@ async def list_equipment(q: str = "", placement: str = "", status: str = "",
         query["category"] = category
     total = await db.equipment.count_documents(query)
     page = max(1, page)
+    page_size = min(max(1, page_size), 200)
     cursor = db.equipment.find(query, {"_id": 0}).sort("sap_no", 1).skip((page - 1) * page_size).limit(page_size)
     items = await cursor.to_list(page_size)
     return {"total": total, "page": page, "page_size": page_size, "items": items}

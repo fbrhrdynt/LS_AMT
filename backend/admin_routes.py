@@ -4,51 +4,45 @@ import os
 import zipfile
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, Query, Header, Response
+from fastapi import APIRouter, Depends, Response
 
 from core import db, now_iso, audit_log
-from auth import _user_from_token
+from auth import require_roles
 
 router = APIRouter(prefix="/api/admin")
+ADMIN = require_roles("admin")
 
 APP_ROOT = Path(__file__).resolve().parents[1]
-EXCLUDE_DIRS = {"node_modules", ".git", "build", "dist", "__pycache__", ".venv",
-                "venv", ".cache", "coverage", ".pytest_cache", "test_reports",
-                ".emergent", ".next", "seed_data"}
-EXCLUDE_FILES = {".env"}  # never ship real secrets (also excludes .env.*)
-EXCLUDE_SUFFIX = {".pyc", ".log", ".pdf"}
+EXCLUDE_DIRS = {
+    "node_modules", ".git", "build", "dist", "__pycache__", ".venv",
+    "venv", ".cache", "coverage", ".pytest_cache", "test_reports",
+    ".emergent", ".next", "seed_data", "storage", "uploads", "backups",
+}
+EXCLUDE_SUFFIX = {".pyc", ".log", ".pdf", ".bson", ".dump", ".archive"}
 
 ENV_EXAMPLES = {
     "backend/.env.example": (
-        "MONGO_URL=\"mongodb://localhost:27017\"\n"
+        "APP_ENV=\"production\"\n"
+        "MONGO_URL=\"mongodb://127.0.0.1:27017\"\n"
         "DB_NAME=\"amt_database\"\n"
-        "CORS_ORIGINS=\"*\"\n"
-        "JWT_SECRET=\"change-me-to-a-long-random-secret\"\n"
+        "JWT_SECRET=\"replace-with-at-least-32-random-characters\"\n"
         "ADMIN_EMAIL=\"admin@example.com\"\n"
-        "ADMIN_PASSWORD=\"change-me\"\n"
-        "FRONTEND_URL=\"http://localhost:3000\"\n"
+        "ADMIN_PASSWORD=\"replace-with-a-strong-password\"\n"
+        "FRONTEND_URL=\"https://amt.example.com\"\n"
         "STORAGE_ROOT=\"/opt/amt/storage\"\n"
     ),
-    "frontend/.env.example": "REACT_APP_BACKEND_URL=http://localhost:8001\n",
+    "frontend/.env.example": "REACT_APP_BACKEND_URL=https://amt.example.com\n",
+}
+
+NO_STORE_HEADERS = {
+    "Cache-Control": "no-store, max-age=0",
+    "Pragma": "no-cache",
+    "X-Content-Type-Options": "nosniff",
 }
 
 
-async def _require_admin(request: Request, auth: str | None, authorization: str | None) -> dict:
-    token = (request.cookies.get("access_token")
-             or auth or (authorization[7:] if authorization and authorization.startswith("Bearer ") else None))
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    user = await _user_from_token(token)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Administrator access required")
-    return user
-
-
 @router.get("/download/source")
-async def download_source(request: Request, auth: str = Query(None), authorization: str = Header(None)):
-    user = await _require_admin(request, auth, authorization)
+async def download_source(user: dict = Depends(ADMIN)):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for base in ["backend", "frontend"]:
@@ -66,35 +60,56 @@ async def download_source(request: Request, auth: str = Query(None), authorizati
                         zf.write(full, arcname=str(arc))
                     except Exception:
                         continue
-        for root_file in ["README.md"]:
-            p = APP_ROOT / root_file
-            if p.exists():
-                zf.write(p, arcname=root_file)
+
+        readme = APP_ROOT / "README.md"
+        if readme.exists():
+            zf.write(readme, arcname="README.md")
+
         for name, content in ENV_EXAMPLES.items():
             zf.writestr(name, content)
+
     buf.seek(0)
-    await audit_log("backup", "source", "backup.source", user, "Downloaded source code archive")
-    return Response(content=buf.read(), media_type="application/zip",
-                    headers={"Content-Disposition": 'attachment; filename="amt-source-code.zip"'})
+    await audit_log(
+        "backup", "source", "backup.source", user,
+        "Downloaded source code archive",
+    )
+    headers = {
+        **NO_STORE_HEADERS,
+        "Content-Disposition": 'attachment; filename="amt-source-code.zip"',
+    }
+    return Response(content=buf.read(), media_type="application/zip", headers=headers)
 
 
 @router.get("/download/database")
-async def download_database(request: Request, auth: str = Query(None), authorization: str = Header(None)):
-    user = await _require_admin(request, auth, authorization)
+async def download_database(user: dict = Depends(ADMIN)):
     buf = io.BytesIO()
     names = await db.list_collection_names()
-    manifest = {"generated_at": now_iso(), "database": os.environ.get("DB_NAME"), "collections": {}}
+    manifest = {
+        "generated_at": now_iso(),
+        "database": os.environ.get("DB_NAME"),
+        "collections": {},
+    }
+
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for name in sorted(names):
             docs = await db[name].find({}).to_list(None)
-            for d in docs:
-                if "_id" in d:
-                    d["_id"] = str(d["_id"])
+            for doc in docs:
+                if "_id" in doc:
+                    doc["_id"] = str(doc["_id"])
             manifest["collections"][name] = len(docs)
-            zf.writestr(f"database/{name}.json", json.dumps(docs, default=str, indent=2, ensure_ascii=False))
+            zf.writestr(
+                f"database/{name}.json",
+                json.dumps(docs, default=str, indent=2, ensure_ascii=False),
+            )
         zf.writestr("database/_manifest.json", json.dumps(manifest, indent=2))
+
     buf.seek(0)
-    await audit_log("backup", "database", "backup.database", user,
-                    f"Downloaded database dump ({len(names)} collections)")
-    return Response(content=buf.read(), media_type="application/zip",
-                    headers={"Content-Disposition": 'attachment; filename="amt-database-backup.zip"'})
+    await audit_log(
+        "backup", "database", "backup.database", user,
+        f"Downloaded database dump ({len(names)} collections)",
+    )
+    headers = {
+        **NO_STORE_HEADERS,
+        "Content-Disposition": 'attachment; filename="amt-database-backup.zip"',
+    }
+    return Response(content=buf.read(), media_type="application/zip", headers=headers)

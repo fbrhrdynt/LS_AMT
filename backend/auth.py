@@ -1,15 +1,19 @@
+import hashlib
 import os
 from datetime import datetime, timezone, timedelta
 
 import bcrypt
 import jwt
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from fastapi import APIRouter, HTTPException, Request, Response, Depends
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from core import db, new_id, now_utc, now_iso, audit_log, clean, ROLES
 
 JWT_ALGORITHM = "HS256"
+ACCESS_TTL_MINUTES = int(os.environ.get("ACCESS_TTL_MINUTES", "30"))
+REFRESH_TTL_DAYS = int(os.environ.get("REFRESH_TTL_DAYS", "7"))
 auth_router = APIRouter(prefix="/api/auth")
 
 
@@ -29,21 +33,69 @@ def get_jwt_secret() -> str:
 
 
 def create_access_token(user_id: str, email: str) -> str:
-    payload = {"sub": user_id, "email": email,
-               "exp": now_utc() + timedelta(hours=12), "type": "access"}
+    now = now_utc()
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "iat": now,
+        "exp": now + timedelta(minutes=ACCESS_TTL_MINUTES),
+        "type": "access",
+    }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
-def create_refresh_token(user_id: str) -> str:
-    payload = {"sub": user_id, "exp": now_utc() + timedelta(days=7), "type": "refresh"}
-    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+def create_refresh_token(user_id: str) -> tuple[str, str, datetime]:
+    now = now_utc()
+    jti = new_id()
+    expires_at = now + timedelta(days=REFRESH_TTL_DAYS)
+    payload = {
+        "sub": user_id,
+        "jti": jti,
+        "iat": now,
+        "exp": expires_at,
+        "type": "refresh",
+    }
+    token = jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+    return token, jti, expires_at
+
+
+def _jti_hash(jti: str) -> str:
+    return hashlib.sha256(jti.encode("utf-8")).hexdigest()
+
+
+def _request_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    return forwarded or (request.client.host if request.client else "?")
 
 
 def set_auth_cookies(response: Response, access: str, refresh: str):
-    response.set_cookie("access_token", access, httponly=True, secure=True,
-                        samesite="lax", max_age=43200, path="/")
-    response.set_cookie("refresh_token", refresh, httponly=True, secure=True,
-                        samesite="lax", max_age=604800, path="/")
+    response.set_cookie(
+        "access_token",
+        access,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=ACCESS_TTL_MINUTES * 60,
+        path="/",
+    )
+    response.set_cookie(
+        "refresh_token",
+        refresh,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=REFRESH_TTL_DAYS * 86400,
+        path="/",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+
+
+def clear_auth_cookies(response: Response):
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path="/")
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
 
 
 def public_user(user: dict) -> dict:
@@ -84,14 +136,13 @@ def require_roles(*roles):
     return dependency
 
 
-# Convenience dependencies
 async def any_user(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
 class RegisterBody(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=12, max_length=128)
     name: str
     role: str = "viewer"
 
@@ -115,64 +166,86 @@ async def _check_lockout(identifier: str):
 
 
 async def _register_failure(identifier: str):
-    await db.login_attempts.update_one(
+    rec = await db.login_attempts.find_one_and_update(
         {"identifier": identifier},
-        {"$inc": {"count": 1},
-         "$set": {"locked_until": (now_utc() + timedelta(minutes=15)).isoformat()}},
+        {
+            "$inc": {"count": 1},
+            "$set": {"updated_at": now_iso()},
+            "$setOnInsert": {"created_at": now_iso()},
+        },
         upsert=True,
+        return_document=ReturnDocument.AFTER,
     )
+    if rec and rec.get("count", 0) >= 5:
+        await db.login_attempts.update_one(
+            {"identifier": identifier},
+            {"$set": {"locked_until": now_utc() + timedelta(minutes=15)}},
+        )
 
 
-@auth_router.post("/register")
-async def register(body: RegisterBody, response: Response, request: Request):
-    # Only admins can create privileged accounts; open self-register -> viewer
-    email = body.email.lower()
-    if await db.users.find_one({"email": email}):
-        raise HTTPException(status_code=400, detail="Email already registered")
-    role = body.role if body.role in ROLES else "viewer"
-    # if not created by an admin, force viewer
-    try:
-        creator = await get_current_user(request)
-        if creator.get("role") != "admin":
-            role = "viewer"
-    except HTTPException:
-        role = "viewer"
-    uid = new_id()
-    doc = {
-        "id": uid, "email": email, "name": body.name,
-        "password_hash": hash_password(body.password), "role": role,
-        "auth_provider": "password", "picture": None, "created_at": now_iso(),
-    }
-    await db.users.insert_one(doc)
-    access = create_access_token(uid, email)
-    refresh = create_refresh_token(uid)
+async def _issue_session(user: dict, response: Response, request: Request):
+    access = create_access_token(user["id"], user["email"])
+    refresh, jti, expires_at = create_refresh_token(user["id"])
+    await db.auth_sessions.insert_one(
+        {
+            "id": new_id(),
+            "user_id": user["id"],
+            "jti_hash": _jti_hash(jti),
+            "created_at": now_utc(),
+            "expires_at": expires_at,
+            "ip": _request_ip(request),
+            "user_agent": request.headers.get("user-agent", "")[:500],
+        }
+    )
     set_auth_cookies(response, access, refresh)
-    await audit_log("user", uid, "user.register", doc, f"Registered {email} ({role})")
-    return public_user(doc)
+
+
+@auth_router.post("/register", include_in_schema=False)
+async def register():
+    raise HTTPException(
+        status_code=403,
+        detail="Self-registration is disabled. Contact an administrator.",
+    )
 
 
 @auth_router.post("/login")
 async def login(body: LoginBody, response: Response, request: Request):
     email = body.email.lower()
-    ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-          or (request.client.host if request.client else "?"))
-    identifier = f"{ip}:{email}"
+    identifier = f"{_request_ip(request)}:{email}"
     await _check_lockout(identifier)
+
     user = await db.users.find_one({"email": email})
-    if not user or not user.get("password_hash") or not verify_password(body.password, user["password_hash"]):
+    if (
+        not user
+        or not user.get("password_hash")
+        or not verify_password(body.password, user["password_hash"])
+    ):
         await _register_failure(identifier)
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
     await db.login_attempts.delete_one({"identifier": identifier})
-    access = create_access_token(user["id"], email)
-    refresh = create_refresh_token(user["id"])
-    set_auth_cookies(response, access, refresh)
+    await _issue_session(user, response, request)
+    await audit_log("user", user["id"], "user.login", user, "Login successful")
     return public_user(user)
 
 
 @auth_router.post("/logout")
-async def logout(response: Response):
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("refresh_token", path="/")
+async def logout(response: Response, request: Request):
+    token = request.cookies.get("refresh_token")
+    if token:
+        try:
+            payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+            if payload.get("type") == "refresh" and payload.get("jti"):
+                await db.auth_sessions.delete_one(
+                    {
+                        "user_id": payload.get("sub"),
+                        "jti_hash": _jti_hash(payload["jti"]),
+                    }
+                )
+        except jwt.InvalidTokenError:
+            pass
+
+    clear_auth_cookies(response)
     return {"ok": True}
 
 
@@ -186,30 +259,40 @@ async def refresh_token(response: Response, request: Request):
     token = request.cookies.get("refresh_token")
     if not token:
         raise HTTPException(status_code=401, detail="No refresh token")
+
     try:
         payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
-        if payload.get("type") != "refresh":
-            raise HTTPException(status_code=401, detail="Invalid token type")
+        if payload.get("type") != "refresh" or not payload.get("jti"):
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    session = await db.auth_sessions.find_one_and_delete(
+        {
+            "user_id": payload.get("sub"),
+            "jti_hash": _jti_hash(payload["jti"]),
+            "expires_at": {"$gt": now_utc()},
+        }
+    )
+    if not session:
+        clear_auth_cookies(response)
+        raise HTTPException(status_code=401, detail="Refresh token revoked or already used")
+
     user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0})
     if not user:
+        clear_auth_cookies(response)
         raise HTTPException(status_code=401, detail="User not found")
-    access = create_access_token(user["id"], user["email"])
-    response.set_cookie("access_token", access, httponly=True, secure=True,
-                        samesite="lax", max_age=43200, path="/")
+
+    await _issue_session(user, response, request)
     return public_user(user)
 
 
-
-# ---- user management (admin) ----
 users_router = APIRouter(prefix="/api/users")
 
 
 @users_router.get("")
-async def list_users(user: dict = Depends(require_roles("admin", "supervisor"))):
-    docs = await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(1000)
-    return docs
+async def list_users(user: dict = Depends(require_roles("admin"))):
+    return await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(1000)
 
 
 class RoleBody(BaseModel):
@@ -217,7 +300,11 @@ class RoleBody(BaseModel):
 
 
 @users_router.patch("/{user_id}/role")
-async def set_role(user_id: str, body: RoleBody, user: dict = Depends(require_roles("admin"))):
+async def set_role(
+    user_id: str,
+    body: RoleBody,
+    user: dict = Depends(require_roles("admin")),
+):
     if body.role not in ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
     res = await db.users.update_one({"id": user_id}, {"$set": {"role": body.role}})
@@ -230,20 +317,30 @@ async def set_role(user_id: str, body: RoleBody, user: dict = Depends(require_ro
 class NewUserBody(BaseModel):
     email: EmailStr
     name: str
-    password: str
+    password: str = Field(min_length=12, max_length=128)
     role: str = "viewer"
 
 
 @users_router.post("")
-async def create_user(body: NewUserBody, user: dict = Depends(require_roles("admin"))):
+async def create_user(
+    body: NewUserBody,
+    user: dict = Depends(require_roles("admin")),
+):
     email = body.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email already registered")
     role = body.role if body.role in ROLES else "viewer"
     uid = new_id()
-    doc = {"id": uid, "email": email, "name": body.name,
-           "password_hash": hash_password(body.password), "role": role,
-           "auth_provider": "password", "picture": None, "created_at": now_iso()}
+    doc = {
+        "id": uid,
+        "email": email,
+        "name": body.name,
+        "password_hash": hash_password(body.password),
+        "role": role,
+        "auth_provider": "password",
+        "picture": None,
+        "created_at": now_iso(),
+    }
     try:
         await db.users.insert_one(doc)
     except DuplicateKeyError:
@@ -253,10 +350,16 @@ async def create_user(body: NewUserBody, user: dict = Depends(require_roles("adm
 
 
 @users_router.delete("/{user_id}")
-async def delete_user(user_id: str, user: dict = Depends(require_roles("admin"))):
+async def delete_user(
+    user_id: str,
+    user: dict = Depends(require_roles("admin")),
+):
     if user_id == user["id"]:
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
-    await db.users.delete_one({"id": user_id})
+    result = await db.users.delete_one({"id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    await db.auth_sessions.delete_many({"user_id": user_id})
     await audit_log("user", user_id, "user.delete", user, "User deleted")
     return {"ok": True}
 
@@ -265,14 +368,24 @@ async def seed_admin():
     admin_email = os.environ["ADMIN_EMAIL"].lower()
     admin_password = os.environ["ADMIN_PASSWORD"]
     existing = await db.users.find_one({"email": admin_email})
+
     if existing is None:
-        await db.users.insert_one({
-            "id": new_id(), "email": admin_email, "name": "Administrator",
-            "password_hash": hash_password(admin_password), "role": "admin",
-            "auth_provider": "password", "picture": None, "created_at": now_iso(),
-        })
-    else:
-        updates = {"role": "admin"}
-        if not existing.get("password_hash") or not verify_password(admin_password, existing["password_hash"]):
-            updates["password_hash"] = hash_password(admin_password)
-        await db.users.update_one({"email": admin_email}, {"$set": updates})
+        await db.users.insert_one(
+            {
+                "id": new_id(),
+                "email": admin_email,
+                "name": "Administrator",
+                "password_hash": hash_password(admin_password),
+                "role": "admin",
+                "auth_provider": "password",
+                "picture": None,
+                "created_at": now_iso(),
+            }
+        )
+        return
+
+    if existing.get("role") != "admin":
+        await db.users.update_one(
+            {"email": admin_email},
+            {"$set": {"role": "admin"}},
+        )
