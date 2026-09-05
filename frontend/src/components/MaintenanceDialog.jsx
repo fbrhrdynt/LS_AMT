@@ -9,24 +9,19 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import ItemCombobox from "@/components/ItemCombobox";
-import MaintenancePurposeCombobox from "@/components/MaintenancePurposeCombobox";
 import { useCurrency } from "@/context/CurrencyContext";
 
 const MNT_TYPES = [
   "Preventive",
   "Corrective",
-  "Major Repair",
-  "Breakdown Maintenance",
-  "Condition Based Maintenance",
+  "Breakdown",
   "Inspection",
-  "Overhaul",
 ];
 
 const CATEGORIES = [
-  "Condition Based Maintenance",
-  "Breakdown Maintenance",
-  "Planned",
-  "Unplanned",
+  "Pre-Job",
+  "Major Repair",
+  "Post-Job",
 ];
 
 const normalizeParts = (rows = []) =>
@@ -84,7 +79,7 @@ export default function MaintenanceDialog({
         maintenance_date: maintenance.maintenance_date || "",
         type_of_maintenance: maintenance.type_of_maintenance || "Corrective",
         maintenance_category:
-          maintenance.maintenance_category || "Breakdown Maintenance",
+          maintenance.maintenance_category || "Pre-Job",
         problem_damage: maintenance.problem_damage || "",
         failure_found: maintenance.failure_found || "",
         root_cause: maintenance.root_cause || "",
@@ -105,7 +100,7 @@ export default function MaintenanceDialog({
       setForm({
         maintenance_date: new Date().toISOString().slice(0, 10),
         type_of_maintenance: "Corrective",
-        maintenance_category: "Breakdown Maintenance",
+        maintenance_category: "Pre-Job",
         problem_damage: "",
         failure_found: "",
         root_cause: "",
@@ -124,19 +119,6 @@ export default function MaintenanceDialog({
       setSupportInput("");
     }
   }, [open, mode, maintenance, equipment]);
-
-  useEffect(() => {
-    if (!open || !form.job_id || form.maintenance_purpose || jobs.length === 0) return;
-    const job = jobs.find((item) => item.id === form.job_id);
-    if (!job) return;
-    const purpose = job.field_name || job.job_name || "";
-    if (!purpose) return;
-    setForm((current) => ({
-      ...current,
-      maintenance_purpose: purpose,
-      client_id: current.client_id || job.client_id || "",
-    }));
-  }, [open, jobs, form.job_id, form.maintenance_purpose]);
 
   const onDateClosedChange = (val) => {
     const start = form.maintenance_date;
@@ -177,12 +159,15 @@ export default function MaintenanceDialog({
   const removePart = (i) =>
     setParts(parts.filter((_, idx) => idx !== i));
 
-  const hasPurchaseParts = parts.some(
-    (p) => (p.supply_source || "Ex-Stock") === "Purchase"
+  const hasPricedParts = parts.some(
+    (p) => ["Purchase", "Warehouse"].includes(
+      p.supply_source || "Ex-Stock"
+    )
   );
 
-  const purchaseTotalCost = parts.reduce((sum, p) => {
-    if ((p.supply_source || "Ex-Stock") !== "Purchase") {
+  const pricedTotalCost = parts.reduce((sum, p) => {
+    const source = p.supply_source || "Ex-Stock";
+    if (!["Purchase", "Warehouse"].includes(source)) {
       return sum;
     }
 
@@ -197,9 +182,11 @@ export default function MaintenanceDialog({
       const qty = Number(p.qty || 0);
       const source = p.supply_source || "Ex-Stock";
       const stock = Number(item?.stock || 0);
+      const usesInventory =
+        source === "Ex-Stock";
       const shortage =
         Boolean(item) &&
-        source === "Ex-Stock" &&
+        usesInventory &&
         qty > stock;
 
       return {
@@ -207,8 +194,9 @@ export default function MaintenanceDialog({
         qty,
         source,
         stock,
+        usesInventory,
         shortage,
-        blocking: shortage && !p.stock_override,
+        blocking: shortage,
         invalidQty: Boolean(p.item_id) && qty <= 0,
       };
     });
@@ -221,7 +209,7 @@ export default function MaintenanceDialog({
   const submit = async () => {
     if (hasBlockingPart) {
       toast.error(
-        "Resolve the spare-part warning first: enable Stock Override, choose Purchase, or correct the quantity."
+        "Resolve the spare-part warning first: choose Purchase/Warehouse or correct the quantity. Ex-Stock cannot make stock negative."
       );
       return;
     }
@@ -239,10 +227,7 @@ export default function MaintenanceDialog({
         item_id: p.item_id,
         qty: Number(p.qty),
         supply_source: p.supply_source || "Ex-Stock",
-        stock_override:
-          (p.supply_source || "Ex-Stock") === "Ex-Stock"
-            ? Boolean(p.stock_override)
-            : false,
+        stock_override: false,
       }));
 
     try {
@@ -354,7 +339,7 @@ export default function MaintenanceDialog({
               />
 
               <TextArea
-                label="Problem / Damage"
+                label="Observed Symptoms"
                 className="sm:col-span-2"
                 rows={2}
                 value={form.problem_damage}
@@ -425,15 +410,12 @@ export default function MaintenanceDialog({
                 onChange={(e) => {
                   const nextClient = e.target.value;
                   const selectedJob = jobs.find((j) => j.id === form.job_id);
-                  const keepPurpose =
+                  const keepJob =
                     !selectedJob || selectedJob.client_id === nextClient;
                   setForm({
                     ...form,
                     client_id: nextClient,
-                    job_id: keepPurpose ? form.job_id : "",
-                    maintenance_purpose: keepPurpose
-                      ? form.maintenance_purpose
-                      : "",
+                    job_id: keepJob ? form.job_id : "",
                   });
                 }}
                 data-testid="mf-client"
@@ -442,21 +424,19 @@ export default function MaintenanceDialog({
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </SelectInput>
 
-              <div className="sm:col-span-2">
-                <MaintenancePurposeCombobox
-                  jobs={jobs}
-                  value={form.maintenance_purpose || ""}
-                  selectedJobId={form.job_id || ""}
-                  clientId={form.client_id || ""}
-                  onSelect={(job, purpose) => setForm({
+              <TextInput
+                label="Maintenance Purpose"
+                className="sm:col-span-2"
+                value={form.maintenance_purpose || ""}
+                onChange={(e) =>
+                  setForm({
                     ...form,
-                    maintenance_purpose: purpose,
-                    job_id: job.id,
-                    client_id: job.client_id || form.client_id || "",
-                  })}
-                  onClear={() => setForm({ ...form, maintenance_purpose: "", job_id: "" })}
-                />
-              </div>
+                    maintenance_purpose: e.target.value,
+                  })
+                }
+                placeholder="Enter maintenance purpose manually"
+                data-testid="mf-purpose"
+              />
             </>
           )}
 
@@ -529,14 +509,14 @@ export default function MaintenanceDialog({
           <div className="mb-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Spare Parts & Consumables
+                Spare Parts & Materials
                 {mode === "close" && " — processed on close"}
               </span>
               <span className="mt-1 block text-[11px] leading-4 text-slate-400">
-                Ex-Stock deducts inventory and does not display pricing.
-                Purchase records direct use without reducing stock and displays
-                the purchase cost. Stock Override allows Ex-Stock usage above
-                the recorded balance and may create negative inventory.
+                Ex-Stock deducts inventory without displaying a value and
+                cannot make stock negative. Purchase records direct use without
+                reducing stock and displays its value. Warehouse also
+                records direct use without reducing stock and displays its value.
               </span>
             </div>
 
@@ -554,12 +534,14 @@ export default function MaintenanceDialog({
             {parts.map((p, i) => {
               const check = partChecks[i];
               const item = check?.item;
+              const showsCost =
+                ["Purchase", "Warehouse"].includes(check?.source);
               const lineCost =
-                item && check?.source === "Purchase"
+                item && showsCost
                   ? (item.unit_price || 0) * (Number(p.qty) || 0)
                   : 0;
               const projected =
-                item && check.source === "Ex-Stock"
+                item && check?.usesInventory
                   ? check.stock - check.qty
                   : null;
 
@@ -582,15 +564,14 @@ export default function MaintenanceDialog({
 
                       {item && (
                         <div className="mt-1 min-w-0 text-[11px] leading-4">
-                          {check.source === "Purchase" ? (
+                          {["Purchase", "Warehouse"].includes(check.source) ? (
                             <span className="text-blue-600">
-                              Purchase/direct-use — inventory remains at{" "}
+                              {check.source}/direct-use — inventory remains at{" "}
                               <b>
                                 {check.stock} {item.unit}
                               </b>.
                             </span>
-                          ) : check.shortage &&
-                            !p.stock_override ? (
+                          ) : check.shortage ? (
                             <span className="flex items-start gap-1 text-red-600">
                               <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                               <span>
@@ -602,20 +583,9 @@ export default function MaintenanceDialog({
                                 <b>
                                   {check.qty} {item.unit}
                                 </b>
-                                . Enable Stock Override or choose Purchase.
-                              </span>
-                            </span>
-                          ) : check.shortage &&
-                            p.stock_override ? (
-                            <span className="flex items-start gap-1 text-amber-700">
-                              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                              <span>
-                                Stock Override enabled: recorded balance will
-                                become{" "}
-                                <b>
-                                  {projected} {item.unit}
-                                </b>
-                                .
+                                . Ex-Stock cannot create a negative stock
+                                balance. Choose Purchase/Warehouse or correct
+                                the quantity.
                               </span>
                             </span>
                           ) : (
@@ -630,7 +600,7 @@ export default function MaintenanceDialog({
                       )}
                     </div>
 
-                    <div className="grid shrink-0 grid-cols-[80px_minmax(0,1fr)_36px] gap-2 md:grid-cols-[80px_120px_132px_36px]">
+                    <div className="grid shrink-0 grid-cols-[80px_minmax(0,1fr)_36px] gap-2 md:grid-cols-[80px_130px_36px]">
                       <div>
                         <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                           Qty
@@ -659,10 +629,7 @@ export default function MaintenanceDialog({
                           onChange={(e) =>
                             updatePart(i, {
                               supply_source: e.target.value,
-                              stock_override:
-                                e.target.value === "Ex-Stock"
-                                  ? Boolean(p.stock_override)
-                                  : false,
+                              stock_override: false,
                             })
                           }
                           className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm"
@@ -670,34 +637,15 @@ export default function MaintenanceDialog({
                         >
                           <option value="Ex-Stock">Ex-Stock</option>
                           <option value="Purchase">Purchase</option>
+                          <option value="Warehouse">Warehouse</option>
                         </select>
                       </div>
-
-                      <label className="col-span-3 flex min-h-[34px] items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600 md:col-span-1 md:col-start-3 md:row-start-1 md:mt-[17px]">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(p.stock_override)}
-                          disabled={
-                            (p.supply_source || "Ex-Stock") !==
-                            "Ex-Stock"
-                          }
-                          onChange={(e) =>
-                            updatePart(i, {
-                              stock_override: e.target.checked,
-                            })
-                          }
-                          data-testid={`part-override-${i}`}
-                        />
-                        <span className="whitespace-nowrap">
-                          Stock Override
-                        </span>
-                      </label>
 
                       <button
                         type="button"
                         onClick={() => removePart(i)}
                         title="Remove"
-                        className="col-start-3 row-start-1 mt-[17px] flex h-[34px] w-9 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-600 md:col-start-4 md:row-start-1"
+                        className="col-start-3 row-start-1 mt-[17px] flex h-[34px] w-9 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-600 md:col-start-3 md:row-start-1"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -710,9 +658,9 @@ export default function MaintenanceDialog({
                         {item.item_code} · {item.item_name}
                       </span>
 
-                      {check?.source === "Purchase" && (
+                      {showsCost && (
                         <span className="shrink-0 font-mono font-semibold text-blue-700">
-                          Purchase cost: {format(lineCost)}
+                          {check.source} value: {format(lineCost)}
                         </span>
                       )}
                     </div>
@@ -728,16 +676,16 @@ export default function MaintenanceDialog({
             )}
           </div>
 
-          {hasPurchaseParts && (
+          {hasPricedParts && (
             <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-100 pt-2 text-sm">
               <span className="text-slate-500">
-                Estimated purchase total
+                Estimated recorded value
               </span>
               <span
                 className="font-mono font-bold text-slate-900"
                 data-testid="mf-total-cost"
               >
-                {format(purchaseTotalCost)}
+                {format(pricedTotalCost)}
               </span>
             </div>
           )}
@@ -748,8 +696,8 @@ export default function MaintenanceDialog({
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
               One or more Ex-Stock items exceed the available inventory.
-              Enable <b>Stock Override</b>, change the source to{" "}
-              <b>Purchase</b>, or correct the quantity before closing.
+              Change the source to <b>Purchase</b> / <b>Warehouse</b>, or
+              correct the quantity before closing.
             </span>
           </div>
         )}

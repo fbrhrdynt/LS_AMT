@@ -98,7 +98,7 @@ export default function Jobs() {
               <option value="">Select client…</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </SelectInput>
             <TextInput label="Site" value={form.site_location} onChange={(e) => setForm({ ...form, site_location: e.target.value })} />
-            <TextInput label="Field Name" required className="sm:col-span-2" value={form.field_name} onChange={(e) => setForm({ ...form, field_name: e.target.value })} />
+            <TextInput label="Field Name" required className="sm:col-span-2" placeholder="Enter field name manually" value={form.field_name} onChange={(e) => setForm({ ...form, field_name: e.target.value })} />
             <TextInput label="Start Date" type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
             <TextInput label="End Date" type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
             <SelectInput label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{STATUSES.map((s) => <option key={s}>{s}</option>)}</SelectInput>

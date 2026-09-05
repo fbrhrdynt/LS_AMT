@@ -76,18 +76,26 @@ function isImageDocument(file) {
 
 function equipmentStatusLabel(value) {
   if (value === "Operational" || value === "Green Tag / Ready") return "Green Tag / Ready";
-  if (value === "Under Maintenance" || value === "Red Tag / Under Maintenance") return "Red Tag / Under Maintenance";
+  if (value === "Under Maintenance" || value === "Yellow Tag / Under Maintenance") return "Yellow Tag / Under Maintenance";
+  if (value === "Out of Service" || value === "Red Tag / Out of Service") return "Red Tag / Out of Service";
   return valueOrDash(value);
 }
 
 function StatusPill({ value }) {
   const text = equipmentStatusLabel(value);
   const green = text === "Green Tag / Ready";
-  const red = text === "Red Tag / Under Maintenance";
+  const yellow = text === "Yellow Tag / Under Maintenance";
+  const red = text === "Red Tag / Out of Service";
   return (
     <span className={[
       "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
-      green ? "bg-emerald-50 text-emerald-700" : red ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-700",
+      green
+        ? "bg-emerald-50 text-emerald-700"
+        : yellow
+          ? "bg-amber-50 text-amber-700"
+          : red
+            ? "bg-red-50 text-red-700"
+            : "bg-slate-100 text-slate-700",
     ].join(" ")}>
       {text}
     </span>
@@ -358,7 +366,7 @@ export default function PublicEquipment() {
               mono
             />
             <InfoItem
-              label="Current Condition"
+              label="Equipment Condition"
               value={
                 equipment.physical_condition
               }
@@ -464,7 +472,7 @@ export default function PublicEquipment() {
                         {m.problem_damage && (
                           <div className="mt-3">
                             <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                              Problem / Damage
+                              Observed Symptoms
                             </div>
 
                             <p className="mt-1 break-words text-sm leading-6 text-slate-700">

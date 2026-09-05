@@ -30,13 +30,13 @@ router = APIRouter(prefix="/api")
 EDIT = require_roles("admin", "supervisor", "technician")
 MANAGE = require_roles("admin", "supervisor")
 
-SUPPLY_SOURCES = ("Ex-Stock", "Purchase")
+SUPPLY_SOURCES = ("Ex-Stock", "Purchase", "Warehouse")
 
 
 class PartLine(BaseModel):
     item_id: str
     qty: float = Field(gt=0)
-    supply_source: Literal["Ex-Stock", "Purchase"] = "Ex-Stock"
+    supply_source: Literal["Ex-Stock", "Purchase", "Warehouse"] = "Ex-Stock"
     stock_override: bool = False
 
 
@@ -92,12 +92,15 @@ async def _resolve_parts(part_lines):
             raise HTTPException(status_code=400, detail=f"Inventory item not found: {pl.item_id}")
 
         source = pl.supply_source if pl.supply_source in SUPPLY_SOURCES else "Ex-Stock"
-        stock_override = bool(pl.stock_override) if source == "Ex-Stock" else False
+        # Negative stock is no longer allowed for maintenance issues.
+        # Keep the field for backward-compatible payload/history only.
+        stock_override = False
         price = float(item.get("unit_price") or 0)
-        purchase_price = price if source == "Purchase" else 0.0
-        purchase_cost = (
+        shows_cost = source in ("Purchase", "Warehouse")
+        recorded_price = price if shows_cost else 0.0
+        recorded_cost = (
             round(price * float(pl.qty), 2)
-            if source == "Purchase"
+            if shows_cost
             else 0.0
         )
 
@@ -108,11 +111,10 @@ async def _resolve_parts(part_lines):
             "type": item["type"],
             "unit": item["unit"],
             "qty": float(pl.qty),
-            # Maintenance pricing represents direct Purchase spend only.
-            # Ex-Stock valuation stays in Inventory and is intentionally
-            # omitted from maintenance display/reporting.
-            "unit_price": purchase_price,
-            "cost": purchase_cost,
+            # Ex-Stock is intentionally shown without a value.
+            # Purchase and Warehouse keep their recorded inventory value.
+            "unit_price": recorded_price,
+            "cost": recorded_cost,
             "supply_source": source,
             "stock_override": stock_override,
             "stock_override_applied": False,
@@ -121,12 +123,12 @@ async def _resolve_parts(part_lines):
 
 
 def _total_cost(parts):
-    """Direct Purchase spend only; Ex-Stock pricing is intentionally excluded."""
+    """Recorded value for Purchase and Warehouse; Ex-Stock stays unpriced."""
     return round(
         sum(
             float(p.get("cost") or 0)
             for p in parts
-            if _part_source(p) == "Purchase"
+            if _part_source(p) in ("Purchase", "Warehouse")
         ),
         2,
     )
@@ -251,7 +253,7 @@ async def _stock_mutation(item_id: str, delta: float, key: str, allow_negative: 
                 detail=(
                     f"Insufficient stock for {current.get('item_name') or item_id} "
                     f"(have {before:g}, need {abs(delta):g}). "
-                    "Enable Stock Override or choose Purchase."
+                    "Choose Purchase or correct the quantity."
                 ),
             )
 
@@ -386,9 +388,7 @@ async def create_maintenance(body: MaintenanceBody, user: dict = Depends(EDIT)):
     if job:
         client_id = job.get("client_id")
     client = await db.clients.find_one({"id": client_id}) if client_id else None
-    purpose = body.maintenance_purpose.strip() or (
-        ((job.get("field_name") or job.get("job_name") or "").strip()) if job else ""
-    )
+    purpose = body.maintenance_purpose.strip()
     parts = await _resolve_parts(body.parts)
     mnt_no = await gen_maintenance_no()
     doc = {
@@ -404,7 +404,11 @@ async def create_maintenance(body: MaintenanceBody, user: dict = Depends(EDIT)):
         "final_condition": body.final_condition, "remark": body.remark,
         "pending_maintenance": "", "progress_update": "", "client_id": client_id,
         "client_name": client["name"] if client else None, "job_id": job_id,
-        "job_number": job["job_number"] if job else None, "parts_consumed": parts,
+        "job_number": job["job_number"] if job else None,
+        "field_name": (
+            job.get("field_name") or job.get("job_name") or ""
+        ) if job else "",
+        "parts_consumed": parts,
         "total_cost": _total_cost(parts), "notes": body.notes, "parts_deducted": False,
         "attachments": [], "status": "Open", "source": "manual",
         "created_by": user["name"], "created_at": now_iso(), "closed_at": None,
@@ -431,9 +435,7 @@ async def update_maintenance(mid: str, body: MaintenanceBody, user: dict = Depen
     job = await db.jobs.find_one({"id": body.job_id}) if body.job_id else None
     client_id = job.get("client_id") if job else body.client_id
     client = await db.clients.find_one({"id": client_id}) if client_id else None
-    purpose = body.maintenance_purpose.strip() or (
-        ((job.get("field_name") or job.get("job_name") or "").strip()) if job else ""
-    )
+    purpose = body.maintenance_purpose.strip()
     updates = {
         "maintenance_date": body.maintenance_date, "type_of_maintenance": body.type_of_maintenance,
         "maintenance_category": body.maintenance_category, "maintenance_purpose": purpose,
@@ -444,6 +446,9 @@ async def update_maintenance(mid: str, body: MaintenanceBody, user: dict = Depen
         "final_condition": body.final_condition, "remark": body.remark,
         "client_id": client_id, "client_name": client["name"] if client else None,
         "job_id": body.job_id, "job_number": job["job_number"] if job else None,
+        "field_name": (
+            job.get("field_name") or job.get("job_name") or ""
+        ) if job else "",
         "parts_consumed": parts, "total_cost": _total_cost(parts), "notes": body.notes,
         "updated_at": now_iso(),
     }
@@ -498,21 +503,29 @@ async def close_maintenance(mid: str, body: CloseBody, user: dict = Depends(EDIT
                 raise HTTPException(status_code=400, detail=f"Item missing: {part.get('item_name') or part['item_id']}")
 
             source = _part_source(part)
-            override = bool(part.get("stock_override")) if source == "Ex-Stock" else False
-            if source == "Ex-Stock":
+            override = False
+            if _part_uses_inventory(part):
                 key = f"{op_id}:close:{index}"
-                stock = await _stock_mutation(item["id"], -qty, key, override)
+                stock = await _stock_mutation(item["id"], -qty, key, False)
                 before, after = stock["before"], stock["after"]
-                override_applied = override and before < qty
+                override_applied = False
                 affects_stock, tx_type = True, "consume"
-                note = (f"Consumed on {claimed['mnt_no']} with Stock Override ({before:g} available, {qty:g} used)"
-                        if override_applied else f"Consumed on {claimed['mnt_no']}")
+                note = f"Ex-Stock issued on {claimed['mnt_no']}"
             else:
-                key = f"{op_id}:purchase:{index}"
+                direct_kind = "warehouse" if source == "Warehouse" else "purchase"
+                key = f"{op_id}:{direct_kind}:{index}"
                 fresh = await db.inventory_items.find_one({"id": item["id"]})
                 before = after = float((fresh or item).get("stock") or 0)
-                override_applied, affects_stock, tx_type = False, False, "purchase_direct_use"
-                note = f"Purchased/direct-use on {claimed['mnt_no']} (inventory not deducted)"
+                override_applied, affects_stock = False, False
+                tx_type = (
+                    "warehouse_direct_use"
+                    if source == "Warehouse"
+                    else "purchase_direct_use"
+                )
+                note = (
+                    f"{source}/direct-use on {claimed['mnt_no']} "
+                    "(inventory not deducted)"
+                )
 
             part.update({
                 "supply_source": source, "stock_override": override,
@@ -575,17 +588,28 @@ async def reopen_maintenance(mid: str, user: dict = Depends(MANAGE)):
                 if not item:
                     raise HTTPException(status_code=409, detail=f"Cannot reopen; inventory item missing for {part.get('item_name') or part['item_id']}")
                 source, qty = _part_source(part), float(part.get("qty") or 0)
-                if source == "Ex-Stock":
+                if _part_uses_inventory(part):
                     key = f"{op_id}:reopen:{index}"
                     stock = await _stock_mutation(item["id"], qty, key, True)
-                    before, after, affects, tx_type = stock["before"], stock["after"], True, "reversal"
-                    note = f"Reversal on reopen {claimed['mnt_no']}"
+                    before, after, affects, tx_type = (
+                        stock["before"], stock["after"], True, "reversal"
+                    )
+                    note = f"Ex-Stock reversal on reopen {claimed['mnt_no']}"
                 else:
-                    key = f"{op_id}:purchase-reopen:{index}"
+                    direct_kind = "warehouse" if source == "Warehouse" else "purchase"
+                    key = f"{op_id}:{direct_kind}-reopen:{index}"
                     fresh = await db.inventory_items.find_one({"id": item["id"]})
                     before = after = float((fresh or item).get("stock") or 0)
-                    affects, tx_type = False, "purchase_reversal"
-                    note = f"Purchase usage reversal on reopen {claimed['mnt_no']} (inventory unchanged)"
+                    affects = False
+                    tx_type = (
+                        "warehouse_reversal"
+                        if source == "Warehouse"
+                        else "purchase_reversal"
+                    )
+                    note = (
+                        f"{source} usage reversal on reopen {claimed['mnt_no']} "
+                        "(inventory unchanged)"
+                    )
                 await _upsert_inventory_tx(key, {
                     "id": new_id(), "operation_id": op_id, "item_id": item["id"],
                     "item_code": item["item_code"], "item_name": item["item_name"],
@@ -714,15 +738,15 @@ async def maintenance_pdf(
             await _equipment_current_location(eq)
         )
 
-    if not m.get("maintenance_purpose") and m.get("job_id"):
-        purpose_job = await db.jobs.find_one(
+    if m.get("job_id") and not m.get("field_name"):
+        field_job = await db.jobs.find_one(
             {"id": m["job_id"]},
             {"_id": 0, "field_name": 1, "job_name": 1},
         )
-        if purpose_job:
-            m["maintenance_purpose"] = (
-                purpose_job.get("field_name")
-                or purpose_job.get("job_name")
+        if field_job:
+            m["field_name"] = (
+                field_job.get("field_name")
+                or field_job.get("job_name")
                 or ""
             )
 

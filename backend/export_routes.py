@@ -33,8 +33,10 @@ AMT_MARK_TAGLINE = ASSET_DIR / "amt-mark-tagline.png"
 def _status_label(value):
     if value in ("Operational", "Green Tag / Ready"):
         return "Green Tag / Ready"
-    if value in ("Under Maintenance", "Red Tag / Under Maintenance"):
-        return "Red Tag / Under Maintenance"
+    if value in ("Under Maintenance", "Yellow Tag / Under Maintenance", "Red Tag / Under Maintenance"):
+        return "Yellow Tag / Under Maintenance"
+    if value in ("Out of Service", "Red Tag / Out of Service"):
+        return "Red Tag / Out of Service"
     return value or ""
 
 
@@ -111,7 +113,7 @@ async def _equipment_rows(params):
 
     return [
         "Asset / SAP No.", "Serial / Mfg No.", "Equipment", "Category",
-        "Manufacturer", "Current Condition", "Current Location",
+        "Manufacturer", "Equipment Condition", "Current Location",
         "Operational Status", "Date of Purchase",
     ], rows
 
@@ -150,37 +152,41 @@ async def _maintenance_rows(params):
         ids = {e["id"] for e in eqs}
         records = [m for m in records if m.get("equipment_id") in ids]
 
-    job_ids = list({m.get("job_id") for m in records if m.get("job_id") and not m.get("maintenance_purpose")})
+    job_ids = list({m.get("job_id") for m in records if m.get("job_id")})
     jobs = await db.jobs.find({"id": {"$in": job_ids}}, {"_id": 0}).to_list(10000)
     job_map = {j["id"]: j for j in jobs}
 
     rows = []
     for m in records:
         purpose = m.get("maintenance_purpose") or ""
-        if not purpose and m.get("job_id"):
-            job = job_map.get(m["job_id"]) or {}
-            purpose = job.get("field_name") or job.get("job_name") or ""
-        purchase_total = round(
+        job = job_map.get(m.get("job_id")) or {}
+        field_name = (
+            m.get("field_name")
+            or job.get("field_name")
+            or job.get("job_name")
+            or ""
+        )
+        recorded_total = round(
             sum(
                 float(part.get("cost") or 0)
                 for part in (m.get("parts_consumed") or [])
-                if (part.get("supply_source") or "Ex-Stock") == "Purchase"
+                if (part.get("supply_source") or "Ex-Stock") in ("Purchase", "Warehouse")
             ),
             2,
         )
         rows.append([
             m.get("mnt_no"), m.get("maintenance_date"), m.get("date_closed"),
             m.get("sap_no"), m.get("equipment_name"), m.get("type_of_maintenance"),
-            m.get("maintenance_category"), purpose, m.get("client_name"),
+            m.get("maintenance_category"), purpose, m.get("client_name"), field_name,
             m.get("lead_technician"), m.get("problem_damage"), m.get("failure_found"),
-            m.get("status"), purchase_total,
+            m.get("status"), recorded_total,
         ])
 
     return [
         "Maintenance No.", "Maintenance Date", "Date Closed", "Asset / SAP No.",
-        "Equipment", "Type", "Category", "Maintenance Purpose", "Client",
-        "Lead Technician", "Problem / Damage", "Failure Found", "Status",
-        "Purchase Total",
+        "Equipment", "Type", "Category", "Maintenance Purpose", "Client", "Field Name",
+        "Lead Technician", "Observed Symptoms", "Failure Found", "Status",
+        "Recorded Value Total",
     ], rows
 
 

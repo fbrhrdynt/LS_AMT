@@ -69,10 +69,12 @@ function MntCard({
   const { format } = useCurrency();
 
   const maintenanceParts = m.parts_consumed || [];
-  const purchaseParts = maintenanceParts.filter(
-    (p) => (p.supply_source || "Ex-Stock") === "Purchase"
+  const pricedParts = maintenanceParts.filter(
+    (p) => ["Purchase", "Warehouse"].includes(
+      p.supply_source || "Ex-Stock"
+    )
   );
-  const purchaseTotal = purchaseParts.reduce(
+  const recordedTotal = pricedParts.reduce(
     (sum, p) => sum + Number(p.cost || 0),
     0
   );
@@ -168,7 +170,7 @@ function MntCard({
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Field
-          label="Problem / Damage"
+          label="Observed Symptoms"
           value={m.problem_damage}
         />
         <Field
@@ -212,18 +214,18 @@ function MntCard({
         <div className="mt-3 border-t border-slate-100 pt-3">
           <div className="flex items-center justify-between gap-3">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Parts & Consumables
+              Spare Parts & Materials
             </div>
 
-            {purchaseParts.length > 0 && (
+            {pricedParts.length > 0 && (
               <div
                 className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700"
                 data-testid={`mnt-cost-${m.id}`}
               >
                 <DollarSign className="h-3.5 w-3.5" />
-                Purchase total:
+                Recorded value:
                 <span className="font-mono">
-                  {format(purchaseTotal)}
+                  {format(recordedTotal)}
                 </span>
               </div>
             )}
@@ -232,7 +234,7 @@ function MntCard({
           <div className="mt-1 flex flex-wrap gap-2">
             {maintenanceParts.map((p, i) => {
               const source = p.supply_source || "Ex-Stock";
-              const isPurchase = source === "Purchase";
+              const showsCost = ["Purchase", "Warehouse"].includes(source);
 
               return (
                 <span
@@ -243,7 +245,7 @@ function MntCard({
                   <span className="text-slate-400">
                     · {source}
                   </span>
-                  {isPurchase && (
+                  {showsCost && (
                     <span className="font-semibold text-blue-700">
                       · {format(Number(p.cost || 0))}
                     </span>
@@ -660,7 +662,7 @@ export default function EquipmentDetail() {
             value="parts"
             data-testid="tab-parts"
           >
-            Parts & Consumables
+            Spare Parts & Materials
           </TabsTrigger>
           <TabsTrigger
             value="jobs"
@@ -710,10 +712,6 @@ export default function EquipmentDetail() {
                   label="Date of Purchase"
                   value={fmtDate(eq.date_of_purchase)}
                   mono
-                />
-                <Field
-                  label="Current Condition"
-                  value={eq.physical_condition}
                 />
                 <Field
                   label="Current Location"
@@ -869,7 +867,7 @@ export default function EquipmentDetail() {
 
         {/* PARTS */}
         <TabsContent value="parts">
-          <Panel title="Parts & Consumables Consumption History">
+          <Panel title="Spare Parts & Materials Consumption History">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-sm">
                 <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">

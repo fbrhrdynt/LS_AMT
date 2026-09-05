@@ -39,8 +39,8 @@ const FILTER_PLACEMENTS = [
 const NEW_LOCATIONS = ["Base", "Job"];
 const STATUSES = [
   { value: "Operational", label: "Green Tag / Ready" },
-  { value: "Under Maintenance", label: "Red Tag / Under Maintenance" },
-  { value: "Out of Service", label: "Out of Service" },
+  { value: "Under Maintenance", label: "Yellow Tag / Under Maintenance" },
+  { value: "Out of Service", label: "Red Tag / Out of Service" },
   { value: "Standby", label: "Standby" },
 ];
 
@@ -494,7 +494,7 @@ export default function EquipmentList() {
             />
 
             <TextInput
-              label="Current Condition"
+              label="Equipment Condition"
               value={form.physical_condition}
               onChange={(e) => setForm({ ...form, physical_condition: e.target.value })}
             />

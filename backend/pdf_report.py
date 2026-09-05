@@ -93,8 +93,8 @@ def _source_label(part):
     return source
 
 
-def _is_purchase(part):
-    return (part.get("supply_source") or "Ex-Stock") == "Purchase"
+def _shows_cost(part):
+    return (part.get("supply_source") or "Ex-Stock") in ("Purchase", "Warehouse")
 
 
 def _location_label(equipment):
@@ -114,8 +114,10 @@ def _location_label(equipment):
 def _equipment_status_label(value):
     if value in ("Operational", "Green Tag / Ready"):
         return "Green Tag / Ready"
-    if value in ("Under Maintenance", "Red Tag / Under Maintenance"):
-        return "Red Tag / Under Maintenance"
+    if value in ("Under Maintenance", "Yellow Tag / Under Maintenance", "Red Tag / Under Maintenance"):
+        return "Yellow Tag / Under Maintenance"
+    if value in ("Out of Service", "Red Tag / Out of Service"):
+        return "Red Tag / Out of Service"
     return value
 
 
@@ -183,7 +185,6 @@ def build_maintenance_pdf(
         ("Serial / Mfg No.", equipment.get("mfg_no")),
         ("Category", equipment.get("category")),
         ("Manufacturer", equipment.get("manufacturer")),
-        ("Current Condition", equipment.get("physical_condition")),
         (
             "Current Location",
             _location_label(equipment),
@@ -204,11 +205,12 @@ def build_maintenance_pdf(
         ("Duration", duration_text),
         ("Maintenance Purpose", mnt.get("maintenance_purpose")),
         ("Client", mnt.get("client_name")),
+        ("Field Name", mnt.get("field_name")),
     ], ss))
 
     el.append(Paragraph("Findings & Actions", ss["H"]))
     el.append(_kv_table([
-        ("Problem / Damage", mnt.get("problem_damage")),
+        ("Observed Symptoms", mnt.get("problem_damage")),
         ("Failure Found", mnt.get("failure_found")),
         ("Root Cause", mnt.get("root_cause")),
         ("Action Taken", mnt.get("action_taken")),
@@ -225,7 +227,7 @@ def build_maintenance_pdf(
     parts = mnt.get("parts_consumed") or []
     if parts:
         el.append(Paragraph(
-            "Spare Parts & Consumables Used",
+            "Spare Parts & Materials Used",
             ss["H"]
         ))
 
@@ -235,12 +237,12 @@ def build_maintenance_pdf(
             "Source",
             "Qty",
             "Unit",
-            "Purchase Cost",
+            "Recorded Value",
         ]]
 
-        purchase_parts = [p for p in parts if _is_purchase(p)]
-        purchase_total = round(
-            sum(float(p.get("cost") or 0) for p in purchase_parts),
+        priced_parts = [p for p in parts if _shows_cost(p)]
+        recorded_total = round(
+            sum(float(p.get("cost") or 0) for p in priced_parts),
             2,
         )
 
@@ -253,22 +255,21 @@ def build_maintenance_pdf(
                 _paragraph(p.get("unit", ""), ss["Small"]),
                 (
                     _paragraph(money(p.get("cost")), ss["Small"])
-                    if _is_purchase(p)
+                    if _shows_cost(p)
                     else _paragraph("", ss["Small"])
                 ),
             ])
 
-        if purchase_parts:
+        if priced_parts:
             # Put the label in the first cell, then span columns 0..4.
-            # This gives PURCHASE TOTAL enough width and keeps the amount
-            # isolated in the Purchase Cost column.
+            # Purchase and Warehouse values share the recorded-value column.
             data.append([
-                Paragraph("<b>PURCHASE TOTAL</b>", ss["Small"]),
+                Paragraph("<b>RECORDED VALUE TOTAL</b>", ss["Small"]),
                 "",
                 "",
                 "",
                 "",
-                _paragraph(money(purchase_total), ss["Small"]),
+                _paragraph(money(recorded_total), ss["Small"]),
             ])
 
         t = Table(
@@ -300,7 +301,7 @@ def build_maintenance_pdf(
             ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ]
 
-        if purchase_parts:
+        if priced_parts:
             table_style.extend([
                 ("SPAN", (0, -1), (4, -1)),
                 ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#EFF6FF")),
@@ -314,7 +315,7 @@ def build_maintenance_pdf(
         t.setStyle(TableStyle(table_style))
         el.append(t)
 
-        if any(not _is_purchase(p) for p in parts):
+        if any(not _shows_cost(p) for p in parts):
             el.append(Paragraph(
                 "<b>Ex-Stock:</b> inventory-issued item pricing is intentionally "
                 "not displayed in this maintenance report.",
@@ -343,8 +344,16 @@ def build_maintenance_pdf(
         if any((p.get("supply_source") or "Ex-Stock") == "Purchase"
                for p in parts):
             el.append(Paragraph(
-                "<b>Purchase:</b> item was recorded as direct purchase/use "
-                "and did not reduce the inventory stock balance.",
+                "<b>Purchase:</b> direct purchase/use; inventory stock was "
+                "not reduced and the recorded value is displayed.",
+                ss["Sub"],
+            ))
+
+        if any((p.get("supply_source") or "Ex-Stock") == "Warehouse"
+               for p in parts):
+            el.append(Paragraph(
+                "<b>Warehouse:</b> direct warehouse use; inventory stock "
+                "was not reduced and the recorded value is displayed.",
                 ss["Sub"],
             ))
 

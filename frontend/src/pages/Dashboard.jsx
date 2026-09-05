@@ -184,7 +184,7 @@ export default function Dashboard() {
   const consumedColumns = [
     {
       key: "item_name",
-      header: "Part / Consumable",
+      header: "Spare Part / Material",
       className:
         "min-w-[320px] text-slate-700",
     },
@@ -306,11 +306,11 @@ export default function Dashboard() {
 
         <Stat
           icon={Wrench}
-          label="Red Tag / Under Maintenance"
+          label="Yellow Tag / Under Maintenance"
           value={
             d.under_maintenance
           }
-          tone="red"
+          tone="amber"
           onClick={() =>
             nav(
               "/equipment?status=Under%20Maintenance"
