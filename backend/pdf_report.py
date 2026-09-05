@@ -83,6 +83,10 @@ def _source_label(part):
     return source
 
 
+def _is_purchase(part):
+    return (part.get("supply_source") or "Ex-Stock") == "Purchase"
+
+
 def build_maintenance_pdf(
     mnt: dict,
     equipment: dict,
@@ -169,8 +173,19 @@ def build_maintenance_pdf(
         ))
 
         data = [[
-            "Item Code", "Item Name", "Source", "Qty", "Unit", "Line Cost"
+            "Item Code",
+            "Item Name",
+            "Source",
+            "Qty",
+            "Unit",
+            "Purchase Cost",
         ]]
+
+        purchase_parts = [p for p in parts if _is_purchase(p)]
+        purchase_total = round(
+            sum(float(p.get("cost") or 0) for p in purchase_parts),
+            2,
+        )
 
         for p in parts:
             data.append([
@@ -179,13 +194,22 @@ def build_maintenance_pdf(
                 _paragraph(_source_label(p), ss["Small"]),
                 _paragraph(p.get("qty", ""), ss["Small"]),
                 _paragraph(p.get("unit", ""), ss["Small"]),
-                _paragraph(money(p.get("cost")), ss["Small"]),
+                (
+                    _paragraph(money(p.get("cost")), ss["Small"])
+                    if _is_purchase(p)
+                    else _paragraph("", ss["Small"])
+                ),
             ])
 
-        data.append([
-            "", "", "", "", "TOTAL",
-            _paragraph(money(mnt.get("total_cost")), ss["Small"])
-        ])
+        if purchase_parts:
+            data.append([
+                "",
+                "",
+                "",
+                "",
+                "PURCHASE TOTAL",
+                _paragraph(money(purchase_total), ss["Small"]),
+            ])
 
         t = Table(
             data,
@@ -199,24 +223,38 @@ def build_maintenance_pdf(
             ],
             repeatRows=1,
         )
-        t.setStyle(TableStyle([
+
+        table_style = [
             ("BACKGROUND", (0, 0), (-1, 0), DARK),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, 0), 7.5),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, LIGHT]),
-            ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#EFF6FF")),
-            ("FONTNAME", (4, -1), (-1, -1), "Helvetica-Bold"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT]),
             ("ALIGN", (3, 1), (3, -1), "RIGHT"),
             ("ALIGN", (5, 1), (5, -1), "RIGHT"),
             ("LEFTPADDING", (0, 0), (-1, -1), 4),
             ("RIGHTPADDING", (0, 0), (-1, -1), 4),
             ("TOPPADDING", (0, 0), (-1, -1), 3),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ]))
+        ]
+
+        if purchase_parts:
+            table_style.extend([
+                ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#EFF6FF")),
+                ("FONTNAME", (4, -1), (-1, -1), "Helvetica-Bold"),
+            ])
+
+        t.setStyle(TableStyle(table_style))
         el.append(t)
+
+        if any(not _is_purchase(p) for p in parts):
+            el.append(Paragraph(
+                "<b>Ex-Stock:</b> inventory-issued item pricing is intentionally "
+                "not displayed in this maintenance report.",
+                ss["Sub"],
+            ))
 
         overrides = [
             p for p in parts

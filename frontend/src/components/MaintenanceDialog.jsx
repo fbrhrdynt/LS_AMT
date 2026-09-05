@@ -161,7 +161,15 @@ export default function MaintenanceDialog({
   const removePart = (i) =>
     setParts(parts.filter((_, idx) => idx !== i));
 
-  const totalCost = parts.reduce((sum, p) => {
+  const hasPurchaseParts = parts.some(
+    (p) => (p.supply_source || "Ex-Stock") === "Purchase"
+  );
+
+  const purchaseTotalCost = parts.reduce((sum, p) => {
+    if ((p.supply_source || "Ex-Stock") !== "Purchase") {
+      return sum;
+    }
+
     const it = inventory.find((x) => x.id === p.item_id);
     const qty = Number(p.qty || 0);
     return sum + (it ? (it.unit_price || 0) * qty : 0);
@@ -521,9 +529,10 @@ export default function MaintenanceDialog({
                 {mode === "close" && " — processed on close"}
               </span>
               <span className="mt-1 block text-[11px] leading-4 text-slate-400">
-                Ex-Stock deducts inventory. Purchase records direct use without
-                reducing stock. Stock Override allows Ex-Stock usage above the
-                recorded balance and may create negative inventory.
+                Ex-Stock deducts inventory and does not display pricing.
+                Purchase records direct use without reducing stock and displays
+                the purchase cost. Stock Override allows Ex-Stock usage above
+                the recorded balance and may create negative inventory.
               </span>
             </div>
 
@@ -541,9 +550,10 @@ export default function MaintenanceDialog({
             {parts.map((p, i) => {
               const check = partChecks[i];
               const item = check?.item;
-              const lineCost = item
-                ? (item.unit_price || 0) * (Number(p.qty) || 0)
-                : 0;
+              const lineCost =
+                item && check?.source === "Purchase"
+                  ? (item.unit_price || 0) * (Number(p.qty) || 0)
+                  : 0;
               const projected =
                 item && check.source === "Ex-Stock"
                   ? check.stock - check.qty
@@ -695,9 +705,12 @@ export default function MaintenanceDialog({
                       <span className="min-w-0 truncate text-slate-400">
                         {item.item_code} · {item.item_name}
                       </span>
-                      <span className="shrink-0 font-mono text-slate-600">
-                        {lineCost ? format(lineCost) : "—"}
-                      </span>
+
+                      {check?.source === "Purchase" && (
+                        <span className="shrink-0 font-mono font-semibold text-blue-700">
+                          Purchase cost: {format(lineCost)}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -711,16 +724,16 @@ export default function MaintenanceDialog({
             )}
           </div>
 
-          {parts.length > 0 && (
+          {hasPurchaseParts && (
             <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-100 pt-2 text-sm">
               <span className="text-slate-500">
-                Estimated total cost
+                Estimated purchase total
               </span>
               <span
                 className="font-mono font-bold text-slate-900"
                 data-testid="mf-total-cost"
               >
-                {format(totalCost)}
+                {format(purchaseTotalCost)}
               </span>
             </div>
           )}

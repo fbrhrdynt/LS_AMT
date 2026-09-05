@@ -78,6 +78,12 @@ async def _resolve_parts(part_lines):
         source = pl.supply_source if pl.supply_source in SUPPLY_SOURCES else "Ex-Stock"
         stock_override = bool(pl.stock_override) if source == "Ex-Stock" else False
         price = float(item.get("unit_price") or 0)
+        purchase_price = price if source == "Purchase" else 0.0
+        purchase_cost = (
+            round(price * float(pl.qty), 2)
+            if source == "Purchase"
+            else 0.0
+        )
 
         resolved.append({
             "item_id": item["id"],
@@ -86,8 +92,11 @@ async def _resolve_parts(part_lines):
             "type": item["type"],
             "unit": item["unit"],
             "qty": float(pl.qty),
-            "unit_price": price,
-            "cost": round(price * float(pl.qty), 2),
+            # Maintenance pricing represents direct Purchase spend only.
+            # Ex-Stock valuation stays in Inventory and is intentionally
+            # omitted from maintenance display/reporting.
+            "unit_price": purchase_price,
+            "cost": purchase_cost,
             "supply_source": source,
             "stock_override": stock_override,
             "stock_override_applied": False,
@@ -96,7 +105,15 @@ async def _resolve_parts(part_lines):
 
 
 def _total_cost(parts):
-    return round(sum(float(p.get("cost") or 0) for p in parts), 2)
+    """Direct Purchase spend only; Ex-Stock pricing is intentionally excluded."""
+    return round(
+        sum(
+            float(p.get("cost") or 0)
+            for p in parts
+            if _part_source(p) == "Purchase"
+        ),
+        2,
+    )
 
 
 @router.get("/maintenance")

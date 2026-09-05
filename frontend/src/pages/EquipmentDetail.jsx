@@ -67,6 +67,15 @@ function MntCard({
 }) {
   const { format } = useCurrency();
 
+  const maintenanceParts = m.parts_consumed || [];
+  const purchaseParts = maintenanceParts.filter(
+    (p) => (p.supply_source || "Ex-Stock") === "Purchase"
+  );
+  const purchaseTotal = purchaseParts.reduce(
+    (sum, p) => sum + Number(p.cost || 0),
+    0
+  );
+
   return (
     <div
       className="rounded-lg border border-slate-200 bg-white p-4"
@@ -198,37 +207,49 @@ function MntCard({
         )}
       </div>
 
-      {(m.parts_consumed || []).length > 0 && (
+      {maintenanceParts.length > 0 && (
         <div className="mt-3 border-t border-slate-100 pt-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               Parts & Consumables
             </div>
 
-            {m.total_cost > 0 && (
+            {purchaseParts.length > 0 && (
               <div
                 className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700"
                 data-testid={`mnt-cost-${m.id}`}
               >
                 <DollarSign className="h-3.5 w-3.5" />
-                Total cost:
+                Purchase total:
                 <span className="font-mono">
-                  {format(m.total_cost)}
+                  {format(purchaseTotal)}
                 </span>
               </div>
             )}
           </div>
 
           <div className="mt-1 flex flex-wrap gap-2">
-            {m.parts_consumed.map((p, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-mono text-slate-700"
-              >
-                {p.item_name} × {p.qty} {p.unit}
-                {p.cost ? ` · ${format(p.cost)}` : ""}
-              </span>
-            ))}
+            {maintenanceParts.map((p, i) => {
+              const source = p.supply_source || "Ex-Stock";
+              const isPurchase = source === "Purchase";
+
+              return (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-mono text-slate-700"
+                >
+                  {p.item_name} × {p.qty} {p.unit}
+                  <span className="text-slate-400">
+                    · {source}
+                  </span>
+                  {isPurchase && (
+                    <span className="font-semibold text-blue-700">
+                      · {format(Number(p.cost || 0))}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
           </div>
         </div>
       )}
