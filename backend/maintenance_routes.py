@@ -30,6 +30,7 @@ class MaintenanceBody(BaseModel):
     maintenance_date: str | None = None
     type_of_maintenance: str = ""
     maintenance_category: str = ""
+    maintenance_purpose: str = ""
     problem_damage: str = ""
     failure_found: str = ""
     root_cause: str = ""
@@ -150,10 +151,16 @@ async def create_maintenance(body: MaintenanceBody, user: dict = Depends(EDIT)):
     client_id, job_id = body.client_id, body.job_id
     if not job_id and eq.get("current_job_id"):
         job_id = eq["current_job_id"]
-        client_id = eq.get("current_client_id")
+        client_id = client_id or eq.get("current_client_id")
 
     job = await db.jobs.find_one({"id": job_id}) if job_id else None
+    if job:
+        client_id = job.get("client_id")
     client = await db.clients.find_one({"id": client_id}) if client_id else None
+    maintenance_purpose = (
+        body.maintenance_purpose.strip()
+        or ((job.get("field_name") or job.get("job_name") or "").strip() if job else "")
+    )
     parts = await _resolve_parts(body.parts)
     mnt_no = await gen_maintenance_no()
 
@@ -166,6 +173,7 @@ async def create_maintenance(body: MaintenanceBody, user: dict = Depends(EDIT)):
         "maintenance_date": body.maintenance_date or now_iso()[:10],
         "date_closed": None,
         "maintenance_category": body.maintenance_category,
+        "maintenance_purpose": maintenance_purpose,
         "type_of_maintenance": body.type_of_maintenance,
         "problem_damage": body.problem_damage,
         "failure_found": body.failure_found,
@@ -236,12 +244,18 @@ async def update_maintenance(mid: str, body: MaintenanceBody, user: dict = Depen
 
     parts = await _resolve_parts(body.parts)
     job = await db.jobs.find_one({"id": body.job_id}) if body.job_id else None
-    client = await db.clients.find_one({"id": body.client_id}) if body.client_id else None
+    client_id = (job.get("client_id") if job else body.client_id)
+    client = await db.clients.find_one({"id": client_id}) if client_id else None
+    maintenance_purpose = (
+        body.maintenance_purpose.strip()
+        or ((job.get("field_name") or job.get("job_name") or "").strip() if job else "")
+    )
 
     updates = {
         "maintenance_date": body.maintenance_date,
         "type_of_maintenance": body.type_of_maintenance,
         "maintenance_category": body.maintenance_category,
+        "maintenance_purpose": maintenance_purpose,
         "problem_damage": body.problem_damage,
         "failure_found": body.failure_found,
         "root_cause": body.root_cause,
@@ -252,7 +266,7 @@ async def update_maintenance(mid: str, body: MaintenanceBody, user: dict = Depen
         "checked_by": body.checked_by,
         "final_condition": body.final_condition,
         "remark": body.remark,
-        "client_id": body.client_id,
+        "client_id": client_id,
         "client_name": client["name"] if client else None,
         "job_id": body.job_id,
         "job_number": job["job_number"] if job else None,
@@ -666,9 +680,22 @@ async def maintenance_pdf(
             await _equipment_current_location(eq)
         )
 
+    if not m.get("maintenance_purpose") and m.get("job_id"):
+        purpose_job = await db.jobs.find_one(
+            {"id": m["job_id"]},
+            {"_id": 0, "field_name": 1, "job_name": 1},
+        )
+        if purpose_job:
+            m["maintenance_purpose"] = (
+                purpose_job.get("field_name")
+                or purpose_job.get("job_name")
+                or ""
+            )
+
     settings = await db.settings.find_one({"_id": "app"}) or {}
     currency = settings.get("currency", "USD")
-    pdf = build_maintenance_pdf(m, eq, currency)
+    timezone_name = settings.get("timezone", "Asia/Jakarta")
+    pdf = build_maintenance_pdf(m, eq, currency, timezone_name)
 
     return Response(
         content=pdf,

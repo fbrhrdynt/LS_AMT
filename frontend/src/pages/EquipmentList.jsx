@@ -38,10 +38,10 @@ const FILTER_PLACEMENTS = [
 ];
 const NEW_LOCATIONS = ["Base", "Job"];
 const STATUSES = [
-  "Operational",
-  "Under Maintenance",
-  "Out of Service",
-  "Standby",
+  { value: "Operational", label: "Green Tag / Ready" },
+  { value: "Under Maintenance", label: "Red Tag / Under Maintenance" },
+  { value: "Out of Service", label: "Out of Service" },
+  { value: "Standby", label: "Standby" },
 ];
 
 export default function EquipmentList() {
@@ -72,6 +72,7 @@ export default function EquipmentList() {
     name: "",
     category: "",
     manufacturer: "",
+    physical_condition: "",
     placement: "Base",
     job_id: "",
     client_id: "",
@@ -120,6 +121,7 @@ export default function EquipmentList() {
       name: e.name || "",
       category: e.category || "",
       manufacturer: e.manufacturer || "",
+      physical_condition: e.physical_condition || "",
       placement: e.placement || "Base",
       job_id: "",
       client_id: "",
@@ -158,7 +160,7 @@ export default function EquipmentList() {
           date_of_purchase:
             editing.date_of_purchase || null,
           physical_condition:
-            editing.physical_condition || "",
+            form.physical_condition || "",
           placement:
             editing.placement || "Base",
           placement_detail:
@@ -182,6 +184,7 @@ export default function EquipmentList() {
             name: form.name,
             category: form.category,
             manufacturer: form.manufacturer,
+            physical_condition: form.physical_condition || "",
             placement: "Base",
             placement_detail: "Base",
             operational_status:
@@ -291,9 +294,7 @@ export default function EquipmentList() {
         >
           <option value="">All Statuses</option>
           {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
+            <option key={s.value} value={s.value}>{s.label}</option>
           ))}
         </SelectInput>
       </div>
@@ -492,6 +493,12 @@ export default function EquipmentList() {
               }
             />
 
+            <TextInput
+              label="Current Condition"
+              value={form.physical_condition}
+              onChange={(e) => setForm({ ...form, physical_condition: e.target.value })}
+            />
+
             {!editing && (
               <SelectInput
                 label="Initial Location"
@@ -556,7 +563,7 @@ export default function EquipmentList() {
               }
             >
               {STATUSES.map((s) => (
-                <option key={s}>{s}</option>
+                <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </SelectInput>
           </div>

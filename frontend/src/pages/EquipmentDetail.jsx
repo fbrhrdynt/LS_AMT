@@ -34,7 +34,7 @@ import {
   Panel,
   SelectInput,
 } from "@/components/Bits";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge, statusLabel } from "@/components/StatusBadge";
 import { fmtDate, fmtDateTime } from "@/lib/helpers";
 import {
   Tabs,
@@ -200,10 +200,10 @@ function MntCard({
           label="Final Condition"
           value={m.final_condition}
         />
-        {m.job_number && (
+        {(m.maintenance_purpose || m.client_name) && (
           <Field
-            label="Client / Job"
-            value={`${m.client_name || ""} · ${m.job_number}`}
+            label="Purpose / Client"
+            value={[m.maintenance_purpose, m.client_name].filter(Boolean).join(" · ")}
           />
         )}
       </div>
@@ -712,7 +712,7 @@ export default function EquipmentDetail() {
                   mono
                 />
                 <Field
-                  label="Physical Condition"
+                  label="Current Condition"
                   value={eq.physical_condition}
                 />
                 <Field
@@ -721,7 +721,7 @@ export default function EquipmentDetail() {
                 />
                 <Field
                   label="Operational Status"
-                  value={eq.operational_status}
+                  value={statusLabel(eq.operational_status)}
                 />
               </div>
             </Panel>

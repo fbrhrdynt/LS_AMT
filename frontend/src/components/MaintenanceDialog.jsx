@@ -9,6 +9,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import ItemCombobox from "@/components/ItemCombobox";
+import MaintenancePurposeCombobox from "@/components/MaintenancePurposeCombobox";
 import { useCurrency } from "@/context/CurrencyContext";
 
 const MNT_TYPES = [
@@ -96,6 +97,7 @@ export default function MaintenanceDialog({
         notes: maintenance.notes || "",
         client_id: maintenance.client_id || "",
         job_id: maintenance.job_id || "",
+        maintenance_purpose: maintenance.maintenance_purpose || "",
       });
       setParts(normalizeParts(maintenance.parts_consumed || []));
       setSupportInput((maintenance.support_technicians || []).join(", "));
@@ -116,11 +118,25 @@ export default function MaintenanceDialog({
         notes: "",
         client_id: equipment?.current_client_id || "",
         job_id: equipment?.current_job_id || "",
+        maintenance_purpose: "",
       });
       setParts([]);
       setSupportInput("");
     }
   }, [open, mode, maintenance, equipment]);
+
+  useEffect(() => {
+    if (!open || !form.job_id || form.maintenance_purpose || jobs.length === 0) return;
+    const job = jobs.find((item) => item.id === form.job_id);
+    if (!job) return;
+    const purpose = job.field_name || job.job_name || "";
+    if (!purpose) return;
+    setForm((current) => ({
+      ...current,
+      maintenance_purpose: purpose,
+      client_id: current.client_id || job.client_id || "",
+    }));
+  }, [open, jobs, form.job_id, form.maintenance_purpose]);
 
   const onDateClosedChange = (val) => {
     const start = form.maintenance_date;
@@ -406,53 +422,41 @@ export default function MaintenanceDialog({
               <SelectInput
                 label="Client (optional)"
                 value={form.client_id || ""}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const nextClient = e.target.value;
+                  const selectedJob = jobs.find((j) => j.id === form.job_id);
+                  const keepPurpose =
+                    !selectedJob || selectedJob.client_id === nextClient;
                   setForm({
                     ...form,
-                    client_id: e.target.value,
-                  })
-                }
+                    client_id: nextClient,
+                    job_id: keepPurpose ? form.job_id : "",
+                    maintenance_purpose: keepPurpose
+                      ? form.maintenance_purpose
+                      : "",
+                  });
+                }}
+                data-testid="mf-client"
               >
                 <option value="">— none —</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </SelectInput>
 
-              <SelectInput
-                label="Job (optional)"
-                value={form.job_id || ""}
-                onChange={(e) =>
-                  setForm({
+              <div className="sm:col-span-2">
+                <MaintenancePurposeCombobox
+                  jobs={jobs}
+                  value={form.maintenance_purpose || ""}
+                  selectedJobId={form.job_id || ""}
+                  clientId={form.client_id || ""}
+                  onSelect={(job, purpose) => setForm({
                     ...form,
-                    job_id: e.target.value,
-                  })
-                }
-                data-testid="mf-job"
-              >
-                <option value="">— none / Base-Workshop —</option>
-                {jobs.map((j) => (
-                  <option key={j.id} value={j.id}>
-                    {j.job_number} · {j.job_name}
-                  </option>
-                ))}
-              </SelectInput>
-
-              <TextArea
-                label="Notes"
-                className="sm:col-span-2"
-                rows={2}
-                value={form.notes || ""}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    notes: e.target.value,
-                  })
-                }
-                data-testid="mf-notes"
-              />
+                    maintenance_purpose: purpose,
+                    job_id: job.id,
+                    client_id: job.client_id || form.client_id || "",
+                  })}
+                  onClear={() => setForm({ ...form, maintenance_purpose: "", job_id: "" })}
+                />
+              </div>
             </>
           )}
 

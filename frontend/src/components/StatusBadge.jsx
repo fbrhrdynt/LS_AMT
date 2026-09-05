@@ -2,7 +2,9 @@ import { cn } from "@/lib/utils";
 
 const STATUS_MAP = {
   Operational: "bg-green-100 text-green-800 border-green-200",
-  "Under Maintenance": "bg-amber-100 text-amber-800 border-amber-200",
+  "Green Tag / Ready": "bg-green-100 text-green-800 border-green-200",
+  "Under Maintenance": "bg-red-100 text-red-800 border-red-200",
+  "Red Tag / Under Maintenance": "bg-red-100 text-red-800 border-red-200",
   "Out of Service": "bg-red-100 text-red-800 border-red-200",
   Standby: "bg-slate-100 text-slate-700 border-slate-200",
   Open: "bg-amber-100 text-amber-800 border-amber-200",
@@ -14,14 +16,25 @@ const STATUS_MAP = {
   Transit: "bg-orange-100 text-orange-800 border-orange-200",
 };
 
+const STATUS_LABELS = {
+  Operational: "Green Tag / Ready",
+  "Green Tag / Ready": "Green Tag / Ready",
+  "Under Maintenance": "Red Tag / Under Maintenance",
+  "Red Tag / Under Maintenance": "Red Tag / Under Maintenance",
+};
+
+export function statusLabel(value) {
+  if (!value) return "—";
+  return STATUS_LABELS[value] || value;
+}
+
 export function StatusBadge({ value, className, testId }) {
-  const cls = STATUS_MAP[value] || "bg-slate-100 text-slate-700 border-slate-200";
+  const display = statusLabel(value);
+  const cls = STATUS_MAP[value] || STATUS_MAP[display] || "bg-slate-100 text-slate-700 border-slate-200";
   return (
-    <span
-      data-testid={testId}
-      className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap", cls, className)}
-    >
-      {value || "—"}
+    <span data-testid={testId}
+      className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap", cls, className)}>
+      {display}
     </span>
   );
 }

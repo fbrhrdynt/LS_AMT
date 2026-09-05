@@ -23,6 +23,7 @@ import ImportWizard from "@/pages/ImportWizard";
 import Reports from "@/pages/Reports";
 import Audit from "@/pages/Audit";
 import UsersPage from "@/pages/Users";
+import SettingsPage from "@/pages/Settings";
 import PublicEquipment from "@/pages/PublicEquipment";
 
 function FullLoader() {
@@ -50,12 +51,8 @@ function RoleRoute({ allow, children }) {
     return (
       <AppLayout>
         <div className="mx-auto mt-16 max-w-md rounded-lg border border-slate-200 bg-white p-8 text-center">
-          <h2 className="font-heading text-lg font-bold text-slate-900">
-            Not authorized
-          </h2>
-          <p className="mt-2 text-sm text-slate-500">
-            Your role does not have access to this page.
-          </p>
+          <h2 className="font-heading text-lg font-bold text-slate-900">Not authorized</h2>
+          <p className="mt-2 text-sm text-slate-500">Your role does not have access to this page.</p>
         </div>
       </AppLayout>
     );
@@ -67,106 +64,21 @@ function RoleRoute({ allow, children }) {
 function AppRoutes() {
   return (
     <Routes>
-      {/* Public QR Equipment Passport — intentionally outside Protected */}
       <Route path="/q/e/:token" element={<PublicEquipment />} />
-
       <Route path="/login" element={<Login />} />
-      <Route
-        path="/"
-        element={
-          <Protected>
-            <Dashboard />
-          </Protected>
-        }
-      />
-      <Route
-        path="/equipment"
-        element={
-          <Protected>
-            <EquipmentList />
-          </Protected>
-        }
-      />
-      <Route
-        path="/equipment/:id"
-        element={
-          <Protected>
-            <EquipmentDetail />
-          </Protected>
-        }
-      />
-      <Route
-        path="/maintenance"
-        element={
-          <Protected>
-            <MaintenanceList />
-          </Protected>
-        }
-      />
-      <Route
-        path="/inventory"
-        element={
-          <Protected>
-            <Inventory />
-          </Protected>
-        }
-      />
-      <Route
-        path="/clients"
-        element={
-          <Protected>
-            <Clients />
-          </Protected>
-        }
-      />
-      <Route
-        path="/jobs"
-        element={
-          <Protected>
-            <Jobs />
-          </Protected>
-        }
-      />
-      <Route
-        path="/jobs/:id"
-        element={
-          <Protected>
-            <JobDetail />
-          </Protected>
-        }
-      />
-      <Route
-        path="/import"
-        element={
-          <RoleRoute allow={canManage}>
-            <ImportWizard />
-          </RoleRoute>
-        }
-      />
-      <Route
-        path="/reports"
-        element={
-          <Protected>
-            <Reports />
-          </Protected>
-        }
-      />
-      <Route
-        path="/audit"
-        element={
-          <Protected>
-            <Audit />
-          </Protected>
-        }
-      />
-      <Route
-        path="/users"
-        element={
-          <RoleRoute allow={isAdmin}>
-            <UsersPage />
-          </RoleRoute>
-        }
-      />
+      <Route path="/" element={<Protected><Dashboard /></Protected>} />
+      <Route path="/equipment" element={<Protected><EquipmentList /></Protected>} />
+      <Route path="/equipment/:id" element={<Protected><EquipmentDetail /></Protected>} />
+      <Route path="/maintenance" element={<Protected><MaintenanceList /></Protected>} />
+      <Route path="/inventory" element={<Protected><Inventory /></Protected>} />
+      <Route path="/clients" element={<Protected><Clients /></Protected>} />
+      <Route path="/jobs" element={<Protected><Jobs /></Protected>} />
+      <Route path="/jobs/:id" element={<Protected><JobDetail /></Protected>} />
+      <Route path="/import" element={<RoleRoute allow={canManage}><ImportWizard /></RoleRoute>} />
+      <Route path="/reports" element={<Protected><Reports /></Protected>} />
+      <Route path="/audit" element={<Protected><Audit /></Protected>} />
+      <Route path="/users" element={<RoleRoute allow={isAdmin}><UsersPage /></RoleRoute>} />
+      <Route path="/settings" element={<RoleRoute allow={isAdmin}><SettingsPage /></RoleRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

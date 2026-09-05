@@ -16,7 +16,8 @@ class ClientBody(BaseModel):
 
 
 class JobBody(BaseModel):
-    job_name: str
+    field_name: str = ""
+    job_name: str = ""
     client_id: str
     site_location: str = ""
     start_date: str | None = None
@@ -28,6 +29,12 @@ class JobBody(BaseModel):
 class AssignBody(BaseModel):
     equipment_id: str
     mobilization_date: str | None = None
+
+
+def _job_field_name(job: dict | None) -> str:
+    if not job:
+        return ""
+    return (job.get("field_name") or job.get("job_name") or "").strip()
 
 
 # -------- clients --------
@@ -80,25 +87,40 @@ async def list_jobs(client_id: str = "", status: str = "", q: str = "",
     if status:
         query["status"] = status
     if q:
-        query["$or"] = [{"job_number": {"$regex": q, "$options": "i"}},
-                        {"job_name": {"$regex": q, "$options": "i"}}]
+        query["$or"] = [
+            {"job_number": {"$regex": q, "$options": "i"}},
+            {"field_name": {"$regex": q, "$options": "i"}},
+            {"job_name": {"$regex": q, "$options": "i"}},
+            {"client_name": {"$regex": q, "$options": "i"}},
+            {"site_location": {"$regex": q, "$options": "i"}},
+        ]
     jobs = await db.jobs.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     for j in jobs:
+        j["field_name"] = _job_field_name(j)
         j["equipment_count"] = await db.assignments.count_documents({"job_id": j["id"], "status": "Active"})
     return jobs
 
 
 @router.post("/jobs")
 async def create_job(body: JobBody, user: dict = Depends(MANAGE)):
+    field_name = (body.field_name or body.job_name).strip()
+    if not field_name:
+        raise HTTPException(status_code=400, detail="Field Name is required")
     client = await db.clients.find_one({"id": body.client_id})
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
     job_no = await gen_job_no()
     doc = body.model_dump()
-    doc.update({"id": new_id(), "job_number": job_no, "client_name": client["name"],
-                "created_at": now_iso()})
+    doc.update({
+        "id": new_id(),
+        "job_number": job_no,
+        "field_name": field_name,
+        "job_name": field_name,
+        "client_name": client["name"],
+        "created_at": now_iso(),
+    })
     await db.jobs.insert_one(doc)
-    await audit_log("job", doc["id"], "job.create", user, f"Created {job_no}")
+    await audit_log("job", doc["id"], "job.create", user, f"Created {job_no} - {field_name}")
     doc.pop("_id", None)
     return doc
 
@@ -108,9 +130,18 @@ async def update_job(jid: str, body: JobBody, user: dict = Depends(MANAGE)):
     job = await db.jobs.find_one({"id": jid})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    field_name = (body.field_name or body.job_name).strip()
+    if not field_name:
+        raise HTTPException(status_code=400, detail="Field Name is required")
     client = await db.clients.find_one({"id": body.client_id})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
     updates = body.model_dump()
-    updates["client_name"] = client["name"] if client else job.get("client_name")
+    updates.update({
+        "field_name": field_name,
+        "job_name": field_name,
+        "client_name": client["name"],
+    })
     await db.jobs.update_one({"id": jid}, {"$set": updates})
     await audit_log("job", jid, "job.update", user, f"Updated {job['job_number']}")
     return await db.jobs.find_one({"id": jid}, {"_id": 0})
@@ -134,6 +165,7 @@ async def job_detail(jid: str, user: dict = Depends(get_current_user)):
     job = await db.jobs.find_one({"id": jid}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    job["field_name"] = _job_field_name(job)
     assignments = await db.assignments.find({"job_id": jid}, {"_id": 0}).sort("mobilization_date", -1).to_list(1000)
     eq_ids = list({a["equipment_id"] for a in assignments})
     equipment = await db.equipment.find({"id": {"$in": eq_ids}}, {"_id": 0}).to_list(1000)
@@ -146,7 +178,7 @@ async def job_detail(jid: str, user: dict = Depends(get_current_user)):
             "maintenance": maintenance, "failures": failures, "parts_consumption": parts}
 
 
-# -------- assignments (mobilize / demobilize) --------
+# -------- assignments --------
 @router.post("/jobs/{jid}/assign")
 async def assign_equipment(jid: str, body: AssignBody, user: dict = Depends(MANAGE)):
     job = await db.jobs.find_one({"id": jid})
@@ -159,11 +191,15 @@ async def assign_equipment(jid: str, body: AssignBody, user: dict = Depends(MANA
     if active:
         raise HTTPException(status_code=400, detail="Equipment already on an active job. Demobilize first.")
     mob = body.mobilization_date or now_iso()[:10]
-    doc = {"id": new_id(), "equipment_id": eq["id"], "equipment_name": eq.get("name"),
-           "sap_no": eq["sap_no"], "job_id": jid, "job_number": job["job_number"],
-           "client_id": job["client_id"], "client_name": job.get("client_name"),
-           "mobilization_date": mob, "demobilization_date": None, "status": "Active",
-           "return_placement": eq.get("placement"), "created_at": now_iso()}
+    field_name = _job_field_name(job)
+    doc = {
+        "id": new_id(), "equipment_id": eq["id"], "equipment_name": eq.get("name"),
+        "sap_no": eq["sap_no"], "job_id": jid, "job_number": job["job_number"],
+        "field_name": field_name, "site_location": job.get("site_location"),
+        "client_id": job["client_id"], "client_name": job.get("client_name"),
+        "mobilization_date": mob, "demobilization_date": None, "status": "Active",
+        "return_placement": eq.get("placement"), "created_at": now_iso(),
+    }
     await db.assignments.insert_one(doc)
     await db.equipment.update_one({"id": eq["id"]}, {"$set": {
         "placement": "Job", "placement_detail": job["job_number"],

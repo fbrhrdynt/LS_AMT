@@ -74,20 +74,21 @@ function isImageDocument(file) {
 }
 
 
-function StatusPill({ value }) {
-  const text = valueOrDash(value);
-  const good =
-    text.toLowerCase() === "operational";
+function equipmentStatusLabel(value) {
+  if (value === "Operational" || value === "Green Tag / Ready") return "Green Tag / Ready";
+  if (value === "Under Maintenance" || value === "Red Tag / Under Maintenance") return "Red Tag / Under Maintenance";
+  return valueOrDash(value);
+}
 
+function StatusPill({ value }) {
+  const text = equipmentStatusLabel(value);
+  const green = text === "Green Tag / Ready";
+  const red = text === "Red Tag / Under Maintenance";
   return (
-    <span
-      className={[
-        "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
-        good
-          ? "bg-emerald-50 text-emerald-700"
-          : "bg-slate-100 text-slate-700",
-      ].join(" ")}
-    >
+    <span className={[
+      "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
+      green ? "bg-emerald-50 text-emerald-700" : red ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-700",
+    ].join(" ")}>
       {text}
     </span>
   );
@@ -360,7 +361,7 @@ export default function PublicEquipment() {
               mono
             />
             <InfoItem
-              label="Physical Condition"
+              label="Current Condition"
               value={
                 equipment.physical_condition
               }
@@ -471,6 +472,15 @@ export default function PublicEquipment() {
 
                             <p className="mt-1 break-words text-sm leading-6 text-slate-700">
                               {m.problem_damage}
+                            </p>
+                          </div>
+                        )}
+
+                        {(m.maintenance_purpose || m.client_name) && (
+                          <div className="mt-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Maintenance Purpose</div>
+                            <p className="mt-1 break-words text-sm text-slate-700">
+                              {m.maintenance_purpose || "—"}{m.client_name ? ` · ${m.client_name}` : ""}
                             </p>
                           </div>
                         )}

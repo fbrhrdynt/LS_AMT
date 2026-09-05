@@ -43,6 +43,8 @@ PUBLIC_MAINTENANCE_FIELDS = {
     "date_closed": 1,
     "type_of_maintenance": 1,
     "maintenance_category": 1,
+    "maintenance_purpose": 1,
+    "client_name": 1,
     "problem_damage": 1,
     "final_condition": 1,
     "status": 1,
@@ -813,15 +815,29 @@ async def public_maintenance_pdf(
         await _public_location_label(eq)
     )
 
+    if not maintenance.get("maintenance_purpose") and maintenance.get("job_id"):
+        purpose_job = await db.jobs.find_one(
+            {"id": maintenance["job_id"]},
+            {"_id": 0, "field_name": 1, "job_name": 1},
+        )
+        if purpose_job:
+            maintenance["maintenance_purpose"] = (
+                purpose_job.get("field_name")
+                or purpose_job.get("job_name")
+                or ""
+            )
+
     settings = (
         await db.settings.find_one({"_id": "app"})
         or {}
     )
     currency = settings.get("currency", "USD")
+    timezone_name = settings.get("timezone", "Asia/Jakarta")
     pdf = build_maintenance_pdf(
         maintenance,
         eq,
         currency,
+        timezone_name,
     )
 
     filename = _safe_filename(

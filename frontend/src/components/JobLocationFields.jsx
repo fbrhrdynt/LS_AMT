@@ -115,7 +115,7 @@ export default function JobLocationFields({
         <option value="">Select job…</option>
         {filteredJobs.map((job) => (
           <option key={job.id} value={job.id}>
-            {job.job_number} · {job.job_name}
+            {job.job_number} · {job.field_name || job.job_name || "Unnamed Field"}
           </option>
         ))}
       </SelectInput>

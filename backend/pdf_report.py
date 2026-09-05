@@ -1,5 +1,6 @@
 import io
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
@@ -101,10 +102,27 @@ def _location_label(equipment):
     return f"{placement} - {detail}"
 
 
+def _equipment_status_label(value):
+    if value in ("Operational", "Green Tag / Ready"):
+        return "Green Tag / Ready"
+    if value in ("Under Maintenance", "Red Tag / Under Maintenance"):
+        return "Red Tag / Under Maintenance"
+    return value
+
+
+def _local_now(timezone_name):
+    try:
+        tz = ZoneInfo(timezone_name or "Asia/Jakarta")
+    except Exception:
+        tz = ZoneInfo("UTC")
+    return datetime.now(timezone.utc).astimezone(tz)
+
+
 def build_maintenance_pdf(
     mnt: dict,
     equipment: dict,
     currency: str = "USD",
+    timezone_name: str = "Asia/Jakarta",
 ) -> bytes:
     def money(v):
         return f"{currency} {float(v or 0):,.2f}"
@@ -142,14 +160,17 @@ def build_maintenance_pdf(
         ("Serial / Mfg No.", equipment.get("mfg_no")),
         ("Category", equipment.get("category")),
         ("Manufacturer", equipment.get("manufacturer")),
+        ("Current Condition", equipment.get("physical_condition")),
         (
             "Current Location",
             _location_label(equipment),
         ),
-        ("Operational Status", equipment.get("operational_status")),
+        ("Operational Status", _equipment_status_label(equipment.get("operational_status"))),
     ], ss))
 
     el.append(Paragraph("Maintenance Details", ss["H"]))
+    duration = mnt.get("duration_days")
+    duration_text = f"{duration} day(s)" if duration not in (None, "") else "-"
     el.append(_kv_table([
         ("Maintenance No.", mnt.get("mnt_no")),
         ("Status", mnt.get("status")),
@@ -157,9 +178,9 @@ def build_maintenance_pdf(
         ("Date Closed", mnt.get("date_closed")),
         ("Type", mnt.get("type_of_maintenance")),
         ("Category", mnt.get("maintenance_category")),
-        ("Duration (days)", mnt.get("duration_days")),
+        ("Duration", duration_text),
+        ("Maintenance Purpose", mnt.get("maintenance_purpose")),
         ("Client", mnt.get("client_name")),
-        ("Job", mnt.get("job_number")),
     ], ss))
 
     el.append(Paragraph("Findings & Actions", ss["H"]))
@@ -305,9 +326,10 @@ def build_maintenance_pdf(
             ))
 
     el.append(Spacer(1, 14))
+    generated = _local_now(timezone_name)
     el.append(Paragraph(
         (
-            f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M')} — "
+            f"Generated on {generated.strftime('%Y-%m-%d %H:%M %Z')} - "
             "AMT (Asset Maintenance Tracker) by LogiSource Digital"
         ),
         ss["Sub"],
