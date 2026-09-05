@@ -65,6 +65,9 @@ async def startup():
     await db.jobs.create_index("job_number")
     await db.assignments.create_index("equipment_id")
     await db.audit_logs.create_index("timestamp")
+    await db.failures.create_index("maintenance_id")
+    await db.inventory_transactions.create_index("operation_key", unique=True, sparse=True)
+    await db.maintenance.create_index("lifecycle_lock.operation_id")
 
     try:
         await seed_admin()

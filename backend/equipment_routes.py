@@ -92,17 +92,20 @@ async def get_equipment(eid: str, user: dict = Depends(get_current_user)):
 
 @router.post("/equipment")
 async def create_equipment(body: EquipmentBody, user: dict = Depends(MANAGE)):
+    if body.placement != "Base":
+        raise HTTPException(status_code=400, detail="New equipment must be registered at Base; use Job assignment for Job location")
     if await db.equipment.find_one({"sap_no": body.sap_no}):
         raise HTTPException(status_code=400, detail="SAP number already exists")
     doc = body.model_dump()
+    doc["placement"], doc["placement_detail"] = "Base", "Base"
     doc.update({"id": new_id(), "current_job_id": None, "current_client_id": None,
                 "source": "manual", "created_at": now_iso(), "updated_at": now_iso()})
     await db.equipment.insert_one(doc)
     await db.location_history.insert_one({
         "id": new_id(), "equipment_id": doc["id"], "from_placement": None,
-        "to_placement": doc["placement"], "placement_detail": doc["placement_detail"],
-        "job_id": None, "reason": "Initial registration", "created_by": user["name"],
-        "created_at": now_iso()})
+        "to_placement": "Base", "placement_detail": "Base", "job_id": None,
+        "reason": "Initial registration", "created_by": user["name"], "created_at": now_iso(),
+    })
     await audit_log("equipment", doc["id"], "equipment.create", user, f"Created {body.sap_no}")
     doc.pop("_id", None)
     return doc
@@ -113,7 +116,13 @@ async def update_equipment(eid: str, body: EquipmentBody, user: dict = Depends(M
     eq = await db.equipment.find_one({"id": eid})
     if not eq:
         raise HTTPException(status_code=404, detail="Equipment not found")
+    if await db.equipment.find_one({"sap_no": body.sap_no, "id": {"$ne": eid}}):
+        raise HTTPException(status_code=400, detail="SAP number already exists")
     updates = body.model_dump()
+    updates["placement"] = eq.get("placement") or "Base"
+    updates["placement_detail"] = eq.get("placement_detail") or eq.get("placement") or "Base"
+    if await db.maintenance.count_documents({"equipment_id": eid, "status": "Open"}):
+        updates["operational_status"] = "Under Maintenance"
     updates["updated_at"] = now_iso()
     await db.equipment.update_one({"id": eid}, {"$set": updates})
     await audit_log("equipment", eid, "equipment.update", user, f"Updated {eq['sap_no']}")
@@ -125,16 +134,26 @@ async def move_equipment(eid: str, body: MoveBody, user: dict = Depends(MANAGE))
     eq = await db.equipment.find_one({"id": eid})
     if not eq:
         raise HTTPException(status_code=404, detail="Equipment not found")
-    await db.equipment.update_one({"id": eid}, {"$set": {
-        "placement": body.placement, "placement_detail": body.placement_detail or body.placement,
-        "updated_at": now_iso()}})
-    await db.location_history.insert_one({
-        "id": new_id(), "equipment_id": eid, "from_placement": eq.get("placement"),
-        "to_placement": body.placement, "placement_detail": body.placement_detail or body.placement,
-        "job_id": None, "reason": body.reason or "Manual move", "created_by": user["name"],
-        "created_at": now_iso()})
-    await audit_log("equipment", eid, "equipment.move", user,
-                    f"{eq.get('placement')} -> {body.placement}")
+    if body.placement != "Base":
+        raise HTTPException(status_code=400, detail="Manual Change Location only supports Base; use Job assignment for Job")
+    active = await db.assignments.find_one({"equipment_id": eid, "status": "Active"})
+    if active or eq.get("current_job_id") or eq.get("placement") == "Job":
+        raise HTTPException(status_code=409, detail="Equipment has an active/current Job relationship; demobilize first")
+    result = await db.equipment.update_one(
+        {"id": eid, "placement": {"$ne": "Job"}, "$or": [
+            {"current_job_id": None}, {"current_job_id": {"$exists": False}}
+        ]},
+        {"$set": {"placement": "Base", "placement_detail": "Base", "updated_at": now_iso()}},
+    )
+    if result.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Equipment location changed concurrently")
+    if eq.get("placement") != "Base" or eq.get("placement_detail") != "Base":
+        await db.location_history.insert_one({
+            "id": new_id(), "equipment_id": eid, "from_placement": eq.get("placement"),
+            "to_placement": "Base", "placement_detail": "Base", "job_id": None,
+            "reason": body.reason or "Manual move", "created_by": user["name"], "created_at": now_iso(),
+        })
+    await audit_log("equipment", eid, "equipment.move", user, f"{eq.get('placement')} -> Base")
     return await db.equipment.find_one({"id": eid}, {"_id": 0})
 
 
@@ -148,24 +167,42 @@ async def delete_equipment(eid: str, user: dict = Depends(MANAGE)):
     if not eq:
         raise HTTPException(status_code=404, detail="Equipment not found")
     active = await db.assignments.find_one({"equipment_id": eid, "status": "Active"})
-    if active:
-        raise HTTPException(status_code=400, detail="Equipment is on an active job. Demobilize first.")
-    await db.maintenance.delete_many({"equipment_id": eid})
-    await db.failures.delete_many({"equipment_id": eid})
-    await db.assignments.delete_many({"equipment_id": eid})
+    if active or eq.get("current_job_id") or eq.get("placement") == "Job":
+        raise HTTPException(status_code=400, detail="Equipment is on a Job; demobilize first")
+    history = {
+        "maintenance": await db.maintenance.count_documents({"equipment_id": eid}),
+        "failures": await db.failures.count_documents({"equipment_id": eid}),
+        "assignments": await db.assignments.count_documents({"equipment_id": eid}),
+        "documents": await db.files.count_documents({"equipment_id": eid}),
+        "inventory_transactions": await db.inventory_transactions.count_documents({"equipment_id": eid}),
+    }
+    used = {k: v for k, v in history.items() if v}
+    if used:
+        detail = ", ".join(f"{k}={v}" for k, v in used.items())
+        raise HTTPException(status_code=400, detail=f"Equipment has operational history and cannot be hard-deleted ({detail})")
     await db.location_history.delete_many({"equipment_id": eid})
-    await db.files.update_many({"equipment_id": eid}, {"$set": {"is_deleted": True}})
-    await db.equipment.delete_one({"id": eid})
-    await audit_log("equipment", eid, "equipment.delete", user, f"Deleted {eq['sap_no']} (+ related records)")
+    result = await db.equipment.delete_one(
+        {"id": eid, "placement": {"$ne": "Job"}, "$or": [
+            {"current_job_id": None}, {"current_job_id": {"$exists": False}}
+        ]}
+    )
+    if result.deleted_count != 1:
+        raise HTTPException(status_code=409, detail="Equipment changed concurrently")
+    await audit_log("equipment", eid, "equipment.delete", user, f"Deleted unused equipment {eq['sap_no']}")
     return {"ok": True}
 
 
 @router.patch("/equipment/{eid}/status")
 async def set_status(eid: str, body: StatusBody, user: dict = Depends(MANAGE)):
-    res = await db.equipment.update_one({"id": eid}, {"$set": {
-        "operational_status": body.operational_status, "updated_at": now_iso()}})
-    if res.matched_count == 0:
+    eq = await db.equipment.find_one({"id": eid})
+    if not eq:
         raise HTTPException(status_code=404, detail="Equipment not found")
+    if await db.maintenance.count_documents({"equipment_id": eid, "status": "Open"}):
+        if body.operational_status != "Under Maintenance":
+            raise HTTPException(status_code=400, detail="Equipment has open maintenance and must remain Red Tag / Under Maintenance")
+    await db.equipment.update_one(
+        {"id": eid}, {"$set": {"operational_status": body.operational_status, "updated_at": now_iso()}}
+    )
     await audit_log("equipment", eid, "equipment.status", user, body.operational_status)
     return await db.equipment.find_one({"id": eid}, {"_id": 0})
 

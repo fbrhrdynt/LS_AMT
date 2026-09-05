@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from pymongo import ReturnDocument
 
 from core import db, new_id, now_iso, gen_job_no, audit_log
 from auth import get_current_user, require_roles
@@ -184,32 +185,65 @@ async def assign_equipment(jid: str, body: AssignBody, user: dict = Depends(MANA
     job = await db.jobs.find_one({"id": jid})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    if job.get("status") in ("Completed", "Cancelled"):
+        raise HTTPException(status_code=400, detail="Cannot assign equipment to a completed/cancelled Job")
     eq = await db.equipment.find_one({"id": body.equipment_id})
     if not eq:
         raise HTTPException(status_code=404, detail="Equipment not found")
-    active = await db.assignments.find_one({"equipment_id": eq["id"], "status": "Active"})
-    if active:
-        raise HTTPException(status_code=400, detail="Equipment already on an active job. Demobilize first.")
-    mob = body.mobilization_date or now_iso()[:10]
-    field_name = _job_field_name(job)
+    if await db.assignments.find_one({"equipment_id": eq["id"], "status": "Active"}):
+        raise HTTPException(status_code=400, detail="Equipment already has an active Job assignment; demobilize first")
+
+    op_id = new_id()
+    claimed = await db.equipment.find_one_and_update(
+        {
+            "id": eq["id"], "placement": {"$ne": "Job"},
+            "$and": [
+                {"$or": [{"current_job_id": None}, {"current_job_id": {"$exists": False}}]},
+                {"$or": [{"assignment_lock": {"$exists": False}}, {"assignment_lock": None}]},
+            ],
+        },
+        {"$set": {"assignment_lock": {"operation_id": op_id, "job_id": jid, "at": now_iso()}}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not claimed:
+        raise HTTPException(status_code=409, detail="Equipment assignment/location changed concurrently; reload and try again")
+
     doc = {
-        "id": new_id(), "equipment_id": eq["id"], "equipment_name": eq.get("name"),
-        "sap_no": eq["sap_no"], "job_id": jid, "job_number": job["job_number"],
-        "field_name": field_name, "site_location": job.get("site_location"),
-        "client_id": job["client_id"], "client_name": job.get("client_name"),
-        "mobilization_date": mob, "demobilization_date": None, "status": "Active",
-        "return_placement": eq.get("placement"), "created_at": now_iso(),
+        "id": new_id(), "assignment_operation_id": op_id, "equipment_id": eq["id"],
+        "equipment_name": eq.get("name"), "sap_no": eq["sap_no"], "job_id": jid,
+        "job_number": job["job_number"], "field_name": _job_field_name(job),
+        "site_location": job.get("site_location"), "client_id": job["client_id"],
+        "client_name": job.get("client_name"),
+        "mobilization_date": body.mobilization_date or now_iso()[:10],
+        "demobilization_date": None, "status": "Active",
+        "return_placement": eq.get("placement") or "Base", "created_at": now_iso(),
     }
-    await db.assignments.insert_one(doc)
-    await db.equipment.update_one({"id": eq["id"]}, {"$set": {
-        "placement": "Job", "placement_detail": job["job_number"],
-        "current_job_id": jid, "current_client_id": job["client_id"], "updated_at": now_iso()}})
+    try:
+        await db.assignments.insert_one(doc)
+        result = await db.equipment.update_one(
+            {"id": eq["id"], "assignment_lock.operation_id": op_id, "$or": [
+                {"current_job_id": None}, {"current_job_id": {"$exists": False}}
+            ]},
+            {"$set": {
+                "placement": "Job", "placement_detail": job["job_number"],
+                "current_job_id": jid, "current_client_id": job["client_id"], "updated_at": now_iso(),
+            }, "$unset": {"assignment_lock": ""}},
+        )
+        if result.matched_count != 1:
+            raise RuntimeError("Equipment assignment claim lost")
+    except Exception:
+        await db.assignments.delete_one({"id": doc["id"], "assignment_operation_id": op_id, "status": "Active"})
+        await db.equipment.update_one({"id": eq["id"], "assignment_lock.operation_id": op_id}, {"$unset": {"assignment_lock": ""}})
+        raise
+
     await db.location_history.insert_one({
-        "id": new_id(), "equipment_id": eq["id"], "from_placement": eq.get("placement"),
-        "to_placement": "Job", "placement_detail": job["job_number"], "job_id": jid,
-        "reason": f"Mobilized to {job['job_number']}", "created_by": user["name"], "created_at": now_iso()})
+        "id": new_id(), "operation_id": op_id, "equipment_id": eq["id"],
+        "from_placement": eq.get("placement"), "to_placement": "Job",
+        "placement_detail": job["job_number"], "job_id": jid,
+        "reason": f"Mobilized to {job['job_number']}", "created_by": user["name"], "created_at": now_iso(),
+    })
     await audit_log("assignment", doc["id"], "assignment.mobilize", user,
-                    f"{eq['sap_no']} -> {job['job_number']}")
+                    f"{eq['sap_no']} -> {job['job_number']}", extra={"operation_id": op_id})
     doc.pop("_id", None)
     return doc
 
@@ -221,22 +255,71 @@ class DemobBody(BaseModel):
 
 @router.post("/assignments/{aid}/demobilize")
 async def demobilize(aid: str, body: DemobBody, user: dict = Depends(MANAGE)):
-    a = await db.assignments.find_one({"id": aid})
-    if not a:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-    if a["status"] != "Active":
-        raise HTTPException(status_code=400, detail="Assignment already closed")
-    demob = body.demobilization_date or now_iso()[:10]
-    await db.assignments.update_one({"id": aid}, {"$set": {
-        "status": "Closed", "demobilization_date": demob, "return_placement": body.return_placement}})
-    await db.equipment.update_one({"id": a["equipment_id"]}, {"$set": {
-        "placement": body.return_placement, "placement_detail": body.return_placement,
-        "current_job_id": None, "current_client_id": None, "updated_at": now_iso()}})
+    if body.return_placement != "Base":
+        raise HTTPException(status_code=400, detail="Demobilized equipment must return to Base")
+    op_id = new_id()
+    assignment = await db.assignments.find_one_and_update(
+        {"id": aid, "status": "Active", "$or": [
+            {"demobilization_lock": {"$exists": False}}, {"demobilization_lock": None}
+        ]},
+        {"$set": {"demobilization_lock": {"operation_id": op_id, "at": now_iso()}}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not assignment:
+        old = await db.assignments.find_one({"id": aid})
+        if not old:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+        if old.get("status") != "Active":
+            raise HTTPException(status_code=400, detail="Assignment already closed")
+        raise HTTPException(status_code=409, detail="Demobilization is already in progress")
+
+    eq = await db.equipment.find_one({"id": assignment["equipment_id"]})
+    if not eq or eq.get("current_job_id") != assignment.get("job_id") or eq.get("placement") != "Job":
+        await db.assignments.update_one(
+            {"id": aid, "demobilization_lock.operation_id": op_id}, {"$unset": {"demobilization_lock": ""}}
+        )
+        raise HTTPException(status_code=409, detail="Assignment and Equipment current location are inconsistent; run integrity preflight")
+
+    moved = await db.equipment.update_one(
+        {"id": assignment["equipment_id"], "current_job_id": assignment["job_id"], "placement": "Job"},
+        {"$set": {
+            "placement": "Base", "placement_detail": "Base", "current_job_id": None,
+            "current_client_id": None, "location_operation_id": op_id, "updated_at": now_iso(),
+        }},
+    )
+    if moved.matched_count != 1:
+        await db.assignments.update_one({"id": aid, "demobilization_lock.operation_id": op_id}, {"$unset": {"demobilization_lock": ""}})
+        raise HTTPException(status_code=409, detail="Equipment changed concurrently; retry demobilization")
+
+    try:
+        closed = await db.assignments.update_one(
+            {"id": aid, "status": "Active", "demobilization_lock.operation_id": op_id},
+            {"$set": {
+                "status": "Closed", "demobilization_date": body.demobilization_date or now_iso()[:10],
+                "return_placement": "Base",
+            }, "$unset": {"demobilization_lock": ""}},
+        )
+        if closed.matched_count != 1:
+            raise RuntimeError("Assignment demobilization claim lost")
+    except Exception:
+        await db.equipment.update_one(
+            {"id": assignment["equipment_id"], "location_operation_id": op_id},
+            {"$set": {
+                "placement": "Job", "placement_detail": assignment["job_number"],
+                "current_job_id": assignment["job_id"], "current_client_id": assignment["client_id"],
+                "updated_at": now_iso(),
+            }, "$unset": {"location_operation_id": ""}},
+        )
+        await db.assignments.update_one({"id": aid, "demobilization_lock.operation_id": op_id}, {"$unset": {"demobilization_lock": ""}})
+        raise
+
+    await db.equipment.update_one({"id": assignment["equipment_id"], "location_operation_id": op_id}, {"$unset": {"location_operation_id": ""}})
     await db.location_history.insert_one({
-        "id": new_id(), "equipment_id": a["equipment_id"], "from_placement": "Job",
-        "to_placement": body.return_placement, "placement_detail": body.return_placement,
-        "job_id": a["job_id"], "reason": f"Demobilized from {a['job_number']}",
-        "created_by": user["name"], "created_at": now_iso()})
+        "id": new_id(), "operation_id": op_id, "equipment_id": assignment["equipment_id"],
+        "from_placement": "Job", "to_placement": "Base", "placement_detail": "Base",
+        "job_id": assignment["job_id"], "reason": f"Demobilized from {assignment['job_number']}",
+        "created_by": user["name"], "created_at": now_iso(),
+    })
     await audit_log("assignment", aid, "assignment.demobilize", user,
-                    f"{a['sap_no']} returned to {body.return_placement}")
+                    f"{assignment['sap_no']} returned to Base", extra={"operation_id": op_id})
     return await db.assignments.find_one({"id": aid}, {"_id": 0})

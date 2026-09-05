@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from pymongo import ReturnDocument
 
 from core import db, new_id, now_iso, audit_log
 from auth import get_current_user, require_roles
@@ -21,7 +22,7 @@ class ItemBody(BaseModel):
 
 
 class AdjustBody(BaseModel):
-    qty: float
+    qty: float = Field(ne=0)
     note: str = ""
 
 
@@ -74,37 +75,56 @@ async def update_item(iid: str, body: ItemBody, user: dict = Depends(MANAGE)):
     item = await db.inventory_items.find_one({"id": iid})
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+    if await db.inventory_items.find_one({"item_code": body.item_code, "id": {"$ne": iid}}):
+        raise HTTPException(status_code=400, detail="Item code already exists")
     updates = body.model_dump()
-    stock_change = body.stock - item["stock"]
+    old_raw = item.get("stock", 0)
+    old_stock, new_stock = float(old_raw or 0), float(body.stock)
+    change = new_stock - old_stock
     updates["updated_at"] = now_iso()
-    await db.inventory_items.update_one({"id": iid}, {"$set": updates})
-    if stock_change != 0:
+    before = await db.inventory_items.find_one_and_update(
+        {"id": iid, "stock": old_raw}, {"$set": updates}, return_document=ReturnDocument.BEFORE
+    )
+    if not before:
+        raise HTTPException(status_code=409, detail="Stock changed concurrently; reload the item before saving")
+    if change:
         await db.inventory_transactions.insert_one({
             "id": new_id(), "item_id": iid, "item_code": item["item_code"],
             "item_name": item["item_name"], "type": "adjustment",
-            "direction": "in" if stock_change > 0 else "out", "qty": abs(stock_change),
+            "direction": "in" if change > 0 else "out", "qty": abs(change),
             "unit": body.unit, "maintenance_id": None, "equipment_id": None,
-            "balance_after": body.stock, "note": "Stock updated via edit",
-            "created_by": user["name"], "created_at": now_iso()})
+            "stock_before": old_stock, "balance_after": new_stock,
+            "note": "Stock updated via edit", "created_by": user["name"], "created_at": now_iso(),
+        })
     await audit_log("inventory", iid, "inventory.update", user, f"Updated {item['item_code']}")
     return await db.inventory_items.find_one({"id": iid}, {"_id": 0})
 
 
 @router.post("/inventory/{iid}/adjust")
 async def adjust_stock(iid: str, body: AdjustBody, user: dict = Depends(MANAGE)):
-    item = await db.inventory_items.find_one({"id": iid})
-    if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
-    new_stock = item["stock"] + body.qty
-    if new_stock < 0:
+    delta = float(body.qty)
+    query = {"id": iid}
+    if delta < 0:
+        query["stock"] = {"$gte": abs(delta)}
+    before = await db.inventory_items.find_one_and_update(
+        query, {"$inc": {"stock": delta}, "$set": {"updated_at": now_iso()}},
+        return_document=ReturnDocument.BEFORE,
+    )
+    if not before:
+        if not await db.inventory_items.find_one({"id": iid}):
+            raise HTTPException(status_code=404, detail="Item not found")
         raise HTTPException(status_code=400, detail="Stock cannot go negative")
-    await db.inventory_items.update_one({"id": iid}, {"$set": {"stock": new_stock, "updated_at": now_iso()}})
+    stock_before = float(before.get("stock") or 0)
+    new_stock = stock_before + delta
     await db.inventory_transactions.insert_one({
-        "id": new_id(), "item_id": iid, "item_code": item["item_code"], "item_name": item["item_name"],
-        "type": "adjustment", "direction": "in" if body.qty >= 0 else "out", "qty": abs(body.qty),
-        "unit": item["unit"], "maintenance_id": None, "equipment_id": None, "balance_after": new_stock,
-        "note": body.note or "Manual adjustment", "created_by": user["name"], "created_at": now_iso()})
-    await audit_log("inventory", iid, "inventory.adjust", user, f"{item['item_code']} {body.qty:+g}")
+        "id": new_id(), "item_id": iid, "item_code": before["item_code"],
+        "item_name": before["item_name"], "type": "adjustment",
+        "direction": "in" if delta > 0 else "out", "qty": abs(delta),
+        "unit": before["unit"], "maintenance_id": None, "equipment_id": None,
+        "stock_before": stock_before, "balance_after": new_stock,
+        "note": body.note or "Manual adjustment", "created_by": user["name"], "created_at": now_iso(),
+    })
+    await audit_log("inventory", iid, "inventory.adjust", user, f"{before['item_code']} {delta:+g}")
     return await db.inventory_items.find_one({"id": iid}, {"_id": 0})
 
 
