@@ -1,26 +1,64 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import {
-  Popover, PopoverContent, PopoverTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
 } from "@/components/ui/command";
+
 
 /**
  * Searchable dropdown for inventory items.
- * items: [{id, item_code, item_name, type, unit, stock}]
+ *
+ * `portal={false}` keeps the popover inside the maintenance dialog's
+ * scroll container. This avoids the Radix Dialog scroll-lock blocking
+ * mouse-wheel events on a portalled dropdown.
  */
-export default function ItemCombobox({ items, value, onChange, testId }) {
+export default function ItemCombobox({
+  items = [],
+  value,
+  onChange,
+  testId,
+}) {
   const [open, setOpen] = useState(false);
-  const selected = items.find((i) => i.id === value);
+  const listRef = useRef(null);
+
+  const selected = items.find(
+    (item) => item.id === value
+  );
+
   const selectedLabel = selected
     ? `${selected.item_code} · ${selected.item_name}`
     : "Select item…";
 
+  const onWheel = (event) => {
+    const list = listRef.current;
+    if (!list) return;
+
+    if (list.scrollHeight <= list.clientHeight) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    list.scrollTop += event.deltaY;
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -38,53 +76,85 @@ export default function ItemCombobox({ items, value, onChange, testId }) {
           >
             {selectedLabel}
           </span>
+
           <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
         </button>
       </PopoverTrigger>
 
       <PopoverContent
+        portal={false}
         className="w-[--radix-popover-trigger-width] max-w-[calc(100vw-2rem)] p-0"
         align="start"
       >
         <Command
-          filter={(val, search) =>
-            val.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
+          filter={(valueText, search) =>
+            valueText
+              .toLowerCase()
+              .includes(search.toLowerCase())
+              ? 1
+              : 0
           }
         >
           <CommandInput
-            placeholder="Search code, name, part no…"
+            placeholder="Search code, name, category, part no…"
             data-testid="combobox-search"
           />
-          <CommandList>
-            <CommandEmpty>No item found.</CommandEmpty>
+
+          <CommandList
+            ref={listRef}
+            onWheelCapture={onWheel}
+            className="max-h-[300px] overscroll-contain"
+          >
+            <CommandEmpty>
+              No matching spare part found.
+            </CommandEmpty>
+
             <CommandGroup>
-              {items.map((it) => (
+              {items.map((item) => (
                 <CommandItem
-                  key={it.id}
-                  value={`${it.item_code} ${it.item_name} ${it.part_number || ""} ${it.type}`}
+                  key={item.id}
+                  value={[
+                    item.item_code,
+                    item.item_name,
+                    item.category,
+                    item.part_number,
+                    item.type,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   onSelect={() => {
-                    onChange(it.id);
+                    onChange(item.id);
                     setOpen(false);
                   }}
-                  data-testid={`combobox-item-${it.id}`}
+                  data-testid={`combobox-item-${item.id}`}
                   className="min-w-0"
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4 shrink-0",
-                      value === it.id ? "opacity-100" : "opacity-0"
+                      value === item.id
+                        ? "opacity-100"
+                        : "opacity-0"
                     )}
                   />
+
                   <div className="min-w-0 flex-1 overflow-hidden">
                     <div className="text-sm text-slate-900">
                       <span className="font-mono text-xs text-slate-500">
-                        {it.item_code}
+                        {item.item_code}
                       </span>
                       <span> · </span>
-                      <span className="break-words">{it.item_name}</span>
+                      <span className="break-words">
+                        {item.item_name}
+                      </span>
                     </div>
+
                     <div className="text-[11px] text-slate-400">
-                      {it.type} · Stock: {it.stock} {it.unit}
+                      {item.category || "Uncategorized"}
+                      {" · "}
+                      {item.type}
+                      {" · "}
+                      Stock: {item.stock} {item.unit}
                     </div>
                   </div>
                 </CommandItem>

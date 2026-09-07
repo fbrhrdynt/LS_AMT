@@ -52,9 +52,12 @@ export default function MaintenanceDialog({
   const [form, setForm] = useState({});
   const [parts, setParts] = useState([]);
   const [supportInput, setSupportInput] = useState("");
+  const [showAllSpareParts, setShowAllSpareParts] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+
+    setShowAllSpareParts(false);
 
     api.get("/clients").then((r) => setClients(r.data)).catch(() => {});
     api.get("/jobs").then((r) => setJobs(r.data)).catch(() => {});
@@ -158,6 +161,68 @@ export default function MaintenanceDialog({
 
   const removePart = (i) =>
     setParts(parts.filter((_, idx) => idx !== i));
+
+  const equipmentCategory = String(
+    equipment?.category || ""
+  ).trim();
+
+  const visibleInventory = useMemo(() => {
+    if (!equipmentCategory || showAllSpareParts) {
+      return inventory;
+    }
+
+    const expectedCategory =
+      equipmentCategory.toLocaleLowerCase();
+    const selectedItemIds = new Set(
+      parts
+        .map((part) => part.item_id)
+        .filter(Boolean)
+    );
+
+    return inventory.filter((item) => {
+      if (selectedItemIds.has(item.id)) {
+        return true;
+      }
+
+      return String(item.category || "")
+        .trim()
+        .toLocaleLowerCase() === expectedCategory;
+    });
+  }, [
+    inventory,
+    equipmentCategory,
+    showAllSpareParts,
+    parts,
+  ]);
+
+  const categoryMatchCount = useMemo(() => {
+    if (!equipmentCategory) {
+      return inventory.length;
+    }
+
+    const expectedCategory =
+      equipmentCategory.toLocaleLowerCase();
+
+    return inventory.filter(
+      (item) =>
+        String(item.category || "")
+          .trim()
+          .toLocaleLowerCase() === expectedCategory
+    ).length;
+  }, [inventory, equipmentCategory]);
+
+  const maintenanceFieldName = useMemo(() => {
+    const job = jobs.find(
+      (item) => item.id === form.job_id
+    );
+
+    return (
+      maintenance?.field_name ||
+      job?.field_name ||
+      job?.job_name ||
+      ""
+    );
+  }, [jobs, form.job_id, maintenance]);
 
   const hasPricedParts = parts.some(
     (p) => ["Purchase", "Warehouse"].includes(
@@ -424,6 +489,15 @@ export default function MaintenanceDialog({
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </SelectInput>
 
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Field Name
+                </div>
+                <div className="mt-1 text-sm font-medium text-slate-700">
+                  {maintenanceFieldName || "—"}
+                </div>
+              </div>
+
               <TextInput
                 label="Maintenance Purpose"
                 className="sm:col-span-2"
@@ -506,7 +580,7 @@ export default function MaintenanceDialog({
         </div>
 
         <div className="mt-2 min-w-0 rounded-md border border-slate-200 p-3">
-          <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Spare Parts & Materials
@@ -514,10 +588,45 @@ export default function MaintenanceDialog({
               </span>
               <span className="mt-1 block text-[11px] leading-4 text-slate-400">
                 Ex-Stock deducts inventory without displaying a value and
-                cannot make stock negative. Purchase records direct use without
-                reducing stock and displays its value. Warehouse also
-                records direct use without reducing stock and displays its value.
+                cannot make stock negative. Purchase and Warehouse record
+                direct use without reducing stock and display their value.
               </span>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">
+                  Equipment Category:{" "}
+                  <b>{equipmentCategory || "—"}</b>
+                </span>
+
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={
+                      !equipmentCategory || showAllSpareParts
+                    }
+                    disabled={!equipmentCategory}
+                    onChange={(event) =>
+                      setShowAllSpareParts(
+                        event.target.checked
+                      )
+                    }
+                    data-testid="show-all-spare-parts"
+                  />
+                  <span>Show All Spare Parts</span>
+                </label>
+
+                {equipmentCategory && !showAllSpareParts && (
+                  <span className="text-slate-400">
+                    {categoryMatchCount} matching item(s)
+                  </span>
+                )}
+
+                {!equipmentCategory && (
+                  <span className="text-amber-600">
+                    Equipment has no category; all spare parts are shown.
+                  </span>
+                )}
+              </div>
             </div>
 
             <Btn
@@ -552,9 +661,9 @@ export default function MaintenanceDialog({
                   data-testid={`part-line-${i}`}
                 >
                   <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-start">
-                    <div className="min-w-0 flex-1 overflow-hidden">
+                    <div className="min-w-0 flex-1">
                       <ItemCombobox
-                        items={inventory}
+                        items={visibleInventory}
                         value={p.item_id}
                         onChange={(id) =>
                           updatePart(i, { item_id: id })
@@ -656,6 +765,9 @@ export default function MaintenanceDialog({
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px]">
                       <span className="min-w-0 truncate text-slate-400">
                         {item.item_code} · {item.item_name}
+                        {item.category
+                          ? ` · ${item.category}`
+                          : ""}
                       </span>
 
                       {showsCost && (
