@@ -46,6 +46,7 @@ class MaintenanceBody(BaseModel):
     type_of_maintenance: str = ""
     maintenance_category: str = ""
     maintenance_purpose: str = ""
+    field_name: str = ""
     problem_damage: str = ""
     failure_found: str = ""
     root_cause: str = ""
@@ -405,9 +406,7 @@ async def create_maintenance(body: MaintenanceBody, user: dict = Depends(EDIT)):
         "pending_maintenance": "", "progress_update": "", "client_id": client_id,
         "client_name": client["name"] if client else None, "job_id": job_id,
         "job_number": job["job_number"] if job else None,
-        "field_name": (
-            job.get("field_name") or job.get("job_name") or ""
-        ) if job else "",
+        "field_name": body.field_name.strip(),
         "parts_consumed": parts,
         "total_cost": _total_cost(parts), "notes": body.notes, "parts_deducted": False,
         "attachments": [], "status": "Open", "source": "manual",
@@ -446,9 +445,7 @@ async def update_maintenance(mid: str, body: MaintenanceBody, user: dict = Depen
         "final_condition": body.final_condition, "remark": body.remark,
         "client_id": client_id, "client_name": client["name"] if client else None,
         "job_id": body.job_id, "job_number": job["job_number"] if job else None,
-        "field_name": (
-            job.get("field_name") or job.get("job_name") or ""
-        ) if job else "",
+        "field_name": body.field_name.strip(),
         "parts_consumed": parts, "total_cost": _total_cost(parts), "notes": body.notes,
         "updated_at": now_iso(),
     }
@@ -737,18 +734,6 @@ async def maintenance_pdf(
         eq["current_location"] = (
             await _equipment_current_location(eq)
         )
-
-    if m.get("job_id") and not m.get("field_name"):
-        field_job = await db.jobs.find_one(
-            {"id": m["job_id"]},
-            {"_id": 0, "field_name": 1, "job_name": 1},
-        )
-        if field_job:
-            m["field_name"] = (
-                field_job.get("field_name")
-                or field_job.get("job_name")
-                or ""
-            )
 
     settings = await db.settings.find_one({"_id": "app"}) or {}
     currency = settings.get("currency", "USD")

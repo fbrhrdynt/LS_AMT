@@ -95,6 +95,7 @@ export default function MaintenanceDialog({
         notes: maintenance.notes || "",
         client_id: maintenance.client_id || "",
         job_id: maintenance.job_id || "",
+        field_name: maintenance.field_name || "",
         maintenance_purpose: maintenance.maintenance_purpose || "",
       });
       setParts(normalizeParts(maintenance.parts_consumed || []));
@@ -116,6 +117,7 @@ export default function MaintenanceDialog({
         notes: "",
         client_id: equipment?.current_client_id || "",
         job_id: equipment?.current_job_id || "",
+        field_name: "",
         maintenance_purpose: "",
       });
       setParts([]);
@@ -210,19 +212,6 @@ export default function MaintenanceDialog({
           .toLocaleLowerCase() === expectedCategory
     ).length;
   }, [inventory, equipmentCategory]);
-
-  const maintenanceFieldName = useMemo(() => {
-    const job = jobs.find(
-      (item) => item.id === form.job_id
-    );
-
-    return (
-      maintenance?.field_name ||
-      job?.field_name ||
-      job?.job_name ||
-      ""
-    );
-  }, [jobs, form.job_id, maintenance]);
 
   const hasPricedParts = parts.some(
     (p) => ["Purchase", "Warehouse"].includes(
@@ -489,14 +478,18 @@ export default function MaintenanceDialog({
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </SelectInput>
 
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                  Field Name
-                </div>
-                <div className="mt-1 text-sm font-medium text-slate-700">
-                  {maintenanceFieldName || "—"}
-                </div>
-              </div>
+              <TextInput
+                label="Field Name"
+                value={form.field_name || ""}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    field_name: e.target.value,
+                  })
+                }
+                placeholder="Enter field name manually"
+                data-testid="mf-field-name"
+              />
 
               <TextInput
                 label="Maintenance Purpose"

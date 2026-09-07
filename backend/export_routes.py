@@ -152,20 +152,10 @@ async def _maintenance_rows(params):
         ids = {e["id"] for e in eqs}
         records = [m for m in records if m.get("equipment_id") in ids]
 
-    job_ids = list({m.get("job_id") for m in records if m.get("job_id")})
-    jobs = await db.jobs.find({"id": {"$in": job_ids}}, {"_id": 0}).to_list(10000)
-    job_map = {j["id"]: j for j in jobs}
-
     rows = []
     for m in records:
         purpose = m.get("maintenance_purpose") or ""
-        job = job_map.get(m.get("job_id")) or {}
-        field_name = (
-            m.get("field_name")
-            or job.get("field_name")
-            or job.get("job_name")
-            or ""
-        )
+        field_name = m.get("field_name") or ""
         recorded_total = round(
             sum(
                 float(part.get("cost") or 0)

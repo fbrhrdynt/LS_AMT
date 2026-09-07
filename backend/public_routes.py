@@ -815,18 +815,6 @@ async def public_maintenance_pdf(
         await _public_location_label(eq)
     )
 
-    if maintenance.get("job_id") and not maintenance.get("field_name"):
-        field_job = await db.jobs.find_one(
-            {"id": maintenance["job_id"]},
-            {"_id": 0, "field_name": 1, "job_name": 1},
-        )
-        if field_job:
-            maintenance["field_name"] = (
-                field_job.get("field_name")
-                or field_job.get("job_name")
-                or ""
-            )
-
     settings = (
         await db.settings.find_one({"_id": "app"})
         or {}

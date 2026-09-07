@@ -29,39 +29,13 @@ export default function MaintenanceList() {
   const [items, setItems] = useState([]);
 
   const load = useCallback(async () => {
-    const [maintenanceResponse, jobsResponse] =
-      await Promise.all([
-        api.get(
-          `/maintenance?status=${encodeURIComponent(
-            status
-          )}&page_size=200`
-        ),
-        api.get("/jobs"),
-      ]);
-
-    const jobs = jobsResponse.data || [];
-    const jobMap = new Map(
-      jobs.map((job) => [job.id, job])
+    const { data } = await api.get(
+      `/maintenance?status=${encodeURIComponent(
+        status
+      )}&page_size=200`
     );
 
-    const enriched = (
-      maintenanceResponse.data.items || []
-    ).map((maintenance) => {
-      const job = jobMap.get(
-        maintenance.job_id
-      );
-
-      return {
-        ...maintenance,
-        field_name:
-          maintenance.field_name ||
-          job?.field_name ||
-          job?.job_name ||
-          "",
-      };
-    });
-
-    setItems(enriched);
+    setItems(data.items || []);
   }, [status]);
 
   useEffect(() => {
