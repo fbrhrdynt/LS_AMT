@@ -18,7 +18,7 @@ import {
 } from "@/lib/api";
 import {
   hasLicenseFeature,
-  isMasterAdmin,
+  isAdmin,
   useAuth,
 } from "@/context/AuthContext";
 import {
@@ -43,7 +43,7 @@ export function useUpdateCheck({
     useState("");
 
   const allowed =
-    isMasterAdmin(user) &&
+    isAdmin(user) &&
     hasLicenseFeature(
       license,
       "update_version"
@@ -329,7 +329,7 @@ export function UpdatePanel() {
               <ArrowUpCircle className="h-4 w-4 text-blue-600" />
               Version &amp; Updates
               <span className="rounded bg-violet-700 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">
-                Master Admin only
+                Master Admin & Admin
               </span>
             </div>
 

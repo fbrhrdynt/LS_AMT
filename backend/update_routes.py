@@ -14,7 +14,7 @@ from update_service import (
 )
 
 router = APIRouter(prefix="/api")
-MASTER_ADMIN = require_roles("master_admin")
+UPDATE_ADMIN = require_roles("admin")
 
 APP_ENV = os.environ.get(
     "APP_ENV",
@@ -50,14 +50,14 @@ async def version_info(
 
 @router.get("/admin/update/check")
 async def admin_update_check(
-    user: dict = Depends(MASTER_ADMIN),
+    user: dict = Depends(UPDATE_ADMIN),
 ):
     return await check_for_update()
 
 
 @router.get("/admin/update/status")
 async def admin_update_status(
-    user: dict = Depends(MASTER_ADMIN),
+    user: dict = Depends(UPDATE_ADMIN),
 ):
     if not UPDATER_STATUS.exists():
         return {
@@ -84,7 +84,7 @@ async def admin_update_status(
 
 @router.post("/admin/update/install")
 async def admin_update_install(
-    user: dict = Depends(MASTER_ADMIN),
+    user: dict = Depends(UPDATE_ADMIN),
 ):
     if APP_ENV != "production":
         raise HTTPException(
