@@ -45,6 +45,7 @@ export function StatusBadge({ value, className, testId }) {
 }
 
 const ROLE_MAP = {
+  master_admin: "bg-violet-700 text-white border-violet-700",
   admin: "bg-slate-900 text-white border-slate-900",
   supervisor: "bg-blue-100 text-blue-800 border-blue-200",
   technician: "bg-teal-100 text-teal-800 border-teal-200",

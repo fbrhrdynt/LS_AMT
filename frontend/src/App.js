@@ -6,6 +6,7 @@ import {
   AuthProvider,
   useAuth,
   canManage,
+  hasMenuAccess,
   isAdmin,
 } from "@/context/AuthContext";
 import { CurrencyProvider } from "@/context/CurrencyContext";
@@ -36,14 +37,30 @@ function FullLoader() {
   );
 }
 
-function Protected({ children }) {
+function NoAccess() {
+  return (
+    <AppLayout>
+      <div className="mx-auto mt-16 max-w-md rounded-lg border border-slate-200 bg-white p-8 text-center">
+        <h2 className="font-heading text-lg font-bold text-slate-900">
+          Menu access not granted
+        </h2>
+        <p className="mt-2 text-sm text-slate-500">
+          Contact an administrator if you need access to this menu.
+        </p>
+      </div>
+    </AppLayout>
+  );
+}
+
+function Protected({ menu, children }) {
   const { user } = useAuth();
   if (user === null) return <FullLoader />;
   if (!user) return <Navigate to="/login" replace />;
+  if (menu && !hasMenuAccess(user, menu)) return <NoAccess />;
   return <AppLayout>{children}</AppLayout>;
 }
 
-function RoleRoute({ allow, children }) {
+function RoleRoute({ allow, menu, children }) {
   const { user } = useAuth();
   if (user === null) return <FullLoader />;
   if (!user) return <Navigate to="/login" replace />;
@@ -59,6 +76,8 @@ function RoleRoute({ allow, children }) {
     );
   }
 
+  if (menu && !hasMenuAccess(user, menu)) return <NoAccess />;
+
   return <AppLayout>{children}</AppLayout>;
 }
 
@@ -67,20 +86,20 @@ function AppRoutes() {
     <Routes>
       <Route path="/q/e/:token" element={<PublicEquipment />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<Protected><Dashboard /></Protected>} />
-      <Route path="/equipment" element={<Protected><EquipmentList /></Protected>} />
-      <Route path="/equipment/:id" element={<Protected><EquipmentDetail /></Protected>} />
-      <Route path="/maintenance" element={<Protected><MaintenanceList /></Protected>} />
-      <Route path="/calibration" element={<Protected><Calibration /></Protected>} />
-      <Route path="/inventory" element={<Protected><Inventory /></Protected>} />
-      <Route path="/clients" element={<Protected><Clients /></Protected>} />
-      <Route path="/jobs" element={<Protected><Jobs /></Protected>} />
-      <Route path="/jobs/:id" element={<Protected><JobDetail /></Protected>} />
-      <Route path="/import" element={<RoleRoute allow={canManage}><ImportWizard /></RoleRoute>} />
-      <Route path="/reports" element={<Protected><Reports /></Protected>} />
-      <Route path="/audit" element={<Protected><Audit /></Protected>} />
-      <Route path="/users" element={<RoleRoute allow={isAdmin}><UsersPage /></RoleRoute>} />
-      <Route path="/settings" element={<RoleRoute allow={isAdmin}><SettingsPage /></RoleRoute>} />
+      <Route path="/" element={<Protected menu="dash"><Dashboard /></Protected>} />
+      <Route path="/equipment" element={<Protected menu="eq"><EquipmentList /></Protected>} />
+      <Route path="/equipment/:id" element={<Protected menu="eq"><EquipmentDetail /></Protected>} />
+      <Route path="/maintenance" element={<Protected menu="mnt"><MaintenanceList /></Protected>} />
+      <Route path="/calibration" element={<Protected menu="cal"><Calibration /></Protected>} />
+      <Route path="/inventory" element={<Protected menu="inv"><Inventory /></Protected>} />
+      <Route path="/clients" element={<Protected menu="cli"><Clients /></Protected>} />
+      <Route path="/jobs" element={<Protected menu="job"><Jobs /></Protected>} />
+      <Route path="/jobs/:id" element={<Protected menu="job"><JobDetail /></Protected>} />
+      <Route path="/import" element={<RoleRoute allow={canManage} menu="imp"><ImportWizard /></RoleRoute>} />
+      <Route path="/reports" element={<Protected menu="rep"><Reports /></Protected>} />
+      <Route path="/audit" element={<Protected menu="aud"><Audit /></Protected>} />
+      <Route path="/users" element={<RoleRoute allow={isAdmin} menu="usr"><UsersPage /></RoleRoute>} />
+      <Route path="/settings" element={<RoleRoute allow={isAdmin} menu="set"><SettingsPage /></RoleRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

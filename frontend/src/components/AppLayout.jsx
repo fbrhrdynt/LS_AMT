@@ -30,6 +30,7 @@ import { api } from "@/lib/api";
 import {
   useAuth,
   canManage,
+  hasMenuAccess,
   isAdmin,
 } from "@/context/AuthContext";
 import {
@@ -349,7 +350,8 @@ export default function AppLayout({
       (!item.admin ||
         isAdmin(user)) &&
       (!item.manage ||
-        canManage(user))
+        canManage(user)) &&
+      hasMenuAccess(user, item.key)
   );
 
   return (

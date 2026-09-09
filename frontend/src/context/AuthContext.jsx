@@ -54,9 +54,43 @@ export function AuthProvider({ children }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
+export const ALL_MENU_KEYS = [
+  "dash",
+  "eq",
+  "mnt",
+  "cal",
+  "inv",
+  "cli",
+  "job",
+  "rep",
+  "imp",
+  "aud",
+  "usr",
+  "set",
+];
+
+export const isMasterAdmin = (user) =>
+  Boolean(user && user.role === "master_admin");
+
 export const canManage = (user) =>
-  user && ["admin", "supervisor"].includes(user.role);
+  user &&
+  ["master_admin", "admin", "supervisor"].includes(user.role);
+
 export const canEdit = (user) =>
-  user && ["admin", "supervisor", "technician"].includes(user.role);
-export const isAdmin = (user) => user && user.role === "admin";
+  user &&
+  ["master_admin", "admin", "supervisor", "technician"].includes(user.role);
+
+export const isAdmin = (user) =>
+  Boolean(
+    user &&
+      ["master_admin", "admin"].includes(user.role)
+  );
+
+export const hasMenuAccess = (user, key) => {
+  if (!user) return false;
+  if (isMasterAdmin(user)) return true;
+  if (!Array.isArray(user.menu_access)) return true;
+  return user.menu_access.includes(key);
+};
+
 export { formatApiError };

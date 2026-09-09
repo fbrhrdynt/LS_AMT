@@ -12,7 +12,28 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-ROLES = ["admin", "supervisor", "technician", "viewer"]
+ROLES = [
+    "master_admin",
+    "admin",
+    "supervisor",
+    "technician",
+    "viewer",
+]
+
+MENU_KEYS = [
+    "dash",
+    "eq",
+    "mnt",
+    "cal",
+    "inv",
+    "cli",
+    "job",
+    "rep",
+    "imp",
+    "aud",
+    "usr",
+    "set",
+]
 
 
 def now_utc() -> datetime:

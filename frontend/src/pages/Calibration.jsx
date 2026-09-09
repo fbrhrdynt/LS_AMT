@@ -52,6 +52,9 @@ const DEFAULT_CATEGORIES = [
   "IR Thermometer",
   "Vibration Meter",
   "Torque Wrench",
+  "Ultrasonic Thickness Gauge",
+  "Heat Stress Meter",
+  "Induction Heater",
 ];
 
 const EMPTY = {
@@ -826,8 +829,11 @@ export default function Calibration() {
             key: "tool_id",
             header:
               "Tool ID / Serial",
-            className:
-              "font-mono font-semibold text-slate-900",
+            render: (tool) => (
+              <span className="font-mono font-semibold text-slate-900">
+                {tool.tool_id || "—"}
+              </span>
+            ),
           },
           {
             key: "tool_name",

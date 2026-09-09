@@ -12,7 +12,6 @@ from fastapi import (
     UploadFile,
 )
 from pydantic import BaseModel, Field
-from pymongo.errors import DuplicateKeyError
 
 from auth import get_current_user, require_roles
 from core import audit_log, db, new_id, now_iso
@@ -365,13 +364,7 @@ async def create_calibration_tool(
         "updated_at": now,
     }
 
-    try:
-        await db.calibration_tools.insert_one(doc)
-    except DuplicateKeyError:
-        raise HTTPException(
-            status_code=400,
-            detail="Tool ID / Serial No. already exists",
-        )
+    await db.calibration_tools.insert_one(doc)
 
     await audit_log(
         "calibration_tool",
@@ -405,19 +398,6 @@ async def update_calibration_tool(
         )
 
     values = _normalized_tool(body)
-
-    duplicate = await db.calibration_tools.find_one(
-        {
-            "tool_id": values["tool_id"],
-            "id": {"$ne": tool_record_id},
-            "is_deleted": {"$ne": True},
-        }
-    )
-    if duplicate:
-        raise HTTPException(
-            status_code=400,
-            detail="Tool ID / Serial No. already exists",
-        )
 
     values["updated_at"] = now_iso()
 

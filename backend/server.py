@@ -212,9 +212,15 @@ async def _ensure_indexes():
         "id", unique=True, name="uniq_calibration_tool_id",
         partialFilterExpression=partial_string("id"),
     )
+    calibration_indexes = await db.calibration_tools.index_information()
+    if "uniq_calibration_tool_code" in calibration_indexes:
+        await db.calibration_tools.drop_index("uniq_calibration_tool_code")
     await db.calibration_tools.create_index(
-        "tool_id", unique=True, name="uniq_calibration_tool_code",
-        partialFilterExpression=partial_string("tool_id"),
+        "tool_id", name="idx_calibration_tool_code"
+    )
+    await db.calibration_tools.create_index(
+        "source_key", unique=True, name="uniq_calibration_source_key",
+        partialFilterExpression=partial_string("source_key"),
     )
     await db.calibration_tools.create_index(
         "category", name="idx_calibration_category"
