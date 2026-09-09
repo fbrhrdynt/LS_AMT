@@ -12,6 +12,11 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from core import db, now_iso, audit_log
 from auth import require_roles
+from license_service import (
+    activate_license_state,
+    get_license_state,
+    require_feature_enabled,
+)
 
 router = APIRouter(prefix="/api/admin")
 MASTER_ADMIN = require_roles("master_admin")
@@ -319,26 +324,9 @@ async def license_status(
         MASTER_ADMIN
     ),
 ):
-    if not LICENSE_KEY:
-        return {
-            "configured": False,
-            "license_key": "",
-            "product_slug": (
-                LICENSE_PRODUCT_SLUG
-            ),
-            "crm_url": LICENSE_API_BASE,
-            "status": "Not configured",
-            "valid": False,
-            "features": [],
-        }
-
-    remote = _post_license_api(
-        "/api/public/license/verify",
-        _license_request_payload(),
-    )
-
-    return _license_summary(
-        remote
+    return await get_license_state(
+        force=True,
+        include_private=True,
     )
 
 
@@ -348,15 +336,8 @@ async def activate_license(
         MASTER_ADMIN
     ),
 ):
-    remote = _post_license_api(
-        "/api/public/license/activate",
-        _license_request_payload(
-            include_hostname=True
-        ),
-    )
-
-    summary = _license_summary(
-        remote
+    summary = (
+        await activate_license_state()
     )
 
     await audit_log(
@@ -379,6 +360,10 @@ async def download_source(
         MASTER_ADMIN
     ),
 ):
+    await require_feature_enabled(
+        "export_code_db"
+    )
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for base in ["backend", "frontend"]:
@@ -422,6 +407,10 @@ async def download_database(
         MASTER_ADMIN
     ),
 ):
+    await require_feature_enabled(
+        "export_code_db"
+    )
+
     buf = io.BytesIO()
     names = await db.list_collection_names()
     manifest = {

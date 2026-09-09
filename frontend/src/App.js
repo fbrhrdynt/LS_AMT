@@ -7,6 +7,7 @@ import {
   useAuth,
   canManage,
   canManageUsers,
+  hasLicenseFeature,
   hasMenuAccess,
   isAdmin,
 } from "@/context/AuthContext";
@@ -53,11 +54,27 @@ function NoAccess() {
   );
 }
 
-function Protected({ menu, children }) {
-  const { user } = useAuth();
+function Protected({
+  menu,
+  feature,
+  children,
+}) {
+  const {
+    user,
+    license,
+  } = useAuth();
   if (user === null) return <FullLoader />;
   if (!user) return <Navigate to="/login" replace />;
   if (menu && !hasMenuAccess(user, menu)) return <NoAccess />;
+  if (
+    feature &&
+    !hasLicenseFeature(
+      license,
+      feature
+    )
+  ) {
+    return <NoAccess />;
+  }
   return <AppLayout>{children}</AppLayout>;
 }
 
@@ -98,7 +115,7 @@ function AppRoutes() {
       <Route path="/jobs/:id" element={<Protected menu="job"><JobDetail /></Protected>} />
       <Route path="/import" element={<RoleRoute allow={canManage} menu="imp"><ImportWizard /></RoleRoute>} />
       <Route path="/reports" element={<Protected menu="rep"><Reports /></Protected>} />
-      <Route path="/audit" element={<Protected menu="aud"><Audit /></Protected>} />
+      <Route path="/audit" element={<Protected menu="aud" feature="audit_log"><Audit /></Protected>} />
       <Route path="/users" element={<RoleRoute allow={canManageUsers} menu="usr"><UsersPage /></RoleRoute>} />
       <Route path="/settings" element={<RoleRoute allow={isAdmin} menu="set"><SettingsPage /></RoleRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />

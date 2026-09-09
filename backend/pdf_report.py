@@ -134,6 +134,7 @@ def build_maintenance_pdf(
     equipment: dict,
     currency: str = "USD",
     timezone_name: str = "Asia/Jakarta",
+    brand_logo_bytes: bytes | None = None,
 ) -> bytes:
     def money(v):
         return f"{currency} {float(v or 0):,.2f}"
@@ -150,11 +151,47 @@ def build_maintenance_pdf(
     ss = _styles()
     el = []
 
-    if AMT_MARK_TAGLINE.exists():
-        # Compact brand mark: keep the report header visible without
-        # consuming excessive vertical space on A4.
+    if brand_logo_bytes:
+        try:
+            logo = RLImage(
+                io.BytesIO(
+                    brand_logo_bytes
+                )
+            )
+            max_w = 48 * mm
+            max_h = 22 * mm
+            scale = min(
+                max_w / logo.imageWidth,
+                max_h / logo.imageHeight,
+            )
+            logo.drawWidth = (
+                logo.imageWidth
+                * scale
+            )
+            logo.drawHeight = (
+                logo.imageHeight
+                * scale
+            )
+            logo.hAlign = "CENTER"
+            el.append(logo)
+            el.append(
+                Spacer(
+                    1,
+                    1.5 * mm,
+                )
+            )
+        except Exception:
+            brand_logo_bytes = None
+
+    if (
+        not brand_logo_bytes
+        and AMT_MARK_TAGLINE.exists()
+    ):
+        # Default AMT branding for Trial or Pro without custom logo.
         logo_width = 44 * mm
-        logo_height = logo_width * (835 / 1883)
+        logo_height = logo_width * (
+            835 / 1883
+        )
         logo = RLImage(
             str(AMT_MARK_TAGLINE),
             width=logo_width,
@@ -162,8 +199,13 @@ def build_maintenance_pdf(
         )
         logo.hAlign = "CENTER"
         el.append(logo)
-        el.append(Spacer(1, 1.5 * mm))
-    else:
+        el.append(
+            Spacer(
+                1,
+                1.5 * mm,
+            )
+        )
+    elif not brand_logo_bytes:
         # Safe fallback if the asset was not deployed.
         el.append(Paragraph(
             "AMT - Asset Maintenance Tracker",

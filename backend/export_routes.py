@@ -22,7 +22,9 @@ from reportlab.platypus import (
 )
 
 from auth import get_current_user
+from branding import get_pdf_brand_logo_bytes
 from core import db
+from license_service import require_feature_enabled
 
 router = APIRouter(prefix="/api")
 
@@ -180,6 +182,147 @@ async def _maintenance_rows(params):
     ], rows
 
 
+def _calibration_expiry_status(
+    expired_date,
+):
+    value = str(
+        expired_date or ""
+    ).strip()
+
+    if not value:
+        return "No Expiry"
+
+    try:
+        end = datetime.strptime(
+            value[:10],
+            "%Y-%m-%d",
+        ).date()
+    except ValueError:
+        return "No Expiry"
+
+    days = (
+        end
+        - datetime.now(
+            timezone.utc
+        ).date()
+    ).days
+
+    if days < 0:
+        return "Expired"
+    if days <= 30:
+        return "Due Soon"
+    return "Valid"
+
+
+async def _calibration_rows(params):
+    query = {
+        "is_deleted": {
+            "$ne": True
+        }
+    }
+
+    q = params.get("q", "")
+    if q:
+        query["$or"] = [
+            {"tool_id": _rx(q)},
+            {"tool_name": _rx(q)},
+            {"category": _rx(q)},
+            {"equipment_sap_no": _rx(q)},
+            {"equipment_name": _rx(q)},
+            {"cert_number": _rx(q)},
+            {"calibrated_by": _rx(q)},
+        ]
+
+    if params.get("category"):
+        query["category"] = (
+            params["category"]
+        )
+
+    records = await db.calibration_tools.find(
+        query,
+        {"_id": 0},
+    ).sort(
+        [
+            ("category", 1),
+            ("tool_id", 1),
+        ]
+    ).to_list(100000)
+
+    rows = []
+    wanted_status = params.get(
+        "status"
+    )
+
+    for item in records:
+        status = (
+            _calibration_expiry_status(
+                item.get(
+                    "expired_date"
+                )
+            )
+        )
+
+        if (
+            wanted_status
+            and status
+            != wanted_status
+        ):
+            continue
+
+        frequency = ""
+        if item.get(
+            "frequency_value"
+        ):
+            unit = (
+                "month(s)"
+                if item.get(
+                    "frequency_unit"
+                )
+                == "month"
+                else "week(s)"
+            )
+            frequency = (
+                f"{item.get('frequency_value')} "
+                f"{unit}"
+            )
+
+        rows.append([
+            item.get("tool_id"),
+            item.get("tool_name"),
+            item.get("category"),
+            item.get("manufacturer"),
+            item.get("model"),
+            item.get("range_spec"),
+            item.get("equipment_sap_no"),
+            item.get("equipment_name"),
+            item.get("calibration_date"),
+            frequency,
+            item.get("expired_date"),
+            status,
+            item.get("cert_number"),
+            item.get("calibrated_by"),
+            item.get("comments"),
+        ])
+
+    return [
+        "Tool ID / Serial",
+        "Tool",
+        "Category",
+        "Manufacturer",
+        "Model",
+        "Range / Set Pressure",
+        "Assigned SAP",
+        "Equipment",
+        "Calibration Date",
+        "Frequency",
+        "Expired Date",
+        "Status",
+        "Certificate No.",
+        "Calibrated By",
+        "Comments / Notes",
+    ], rows
+
+
 async def _inventory_rows(params):
     query = {}
     q = params.get("q", "")
@@ -266,6 +409,7 @@ async def _dataset(dataset, params, user):
         "equipment": _equipment_rows,
         "maintenance": _maintenance_rows,
         "inventory": _inventory_rows,
+        "calibration": _calibration_rows,
         "clients": _client_rows,
         "jobs": _job_rows,
         "audit": _audit_rows,
@@ -297,7 +441,7 @@ def _xlsx_bytes(title, headers, rows):
     return out.read()
 
 
-def _pdf_bytes(title, headers, rows, timezone_name):
+def _pdf_bytes(title, headers, rows, timezone_name, brand_logo_bytes=None):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf,
@@ -360,9 +504,40 @@ def _pdf_bytes(title, headers, rows, timezone_name):
         ),
     ]
 
-    if AMT_MARK_TAGLINE.exists():
+    if brand_logo_bytes:
+        try:
+            logo = RLImage(
+                io.BytesIO(
+                    brand_logo_bytes
+                )
+            )
+            max_w = 42 * mm
+            max_h = 18 * mm
+            scale = min(
+                max_w / logo.imageWidth,
+                max_h / logo.imageHeight,
+            )
+            logo.drawWidth = (
+                logo.imageWidth
+                * scale
+            )
+            logo.drawHeight = (
+                logo.imageHeight
+                * scale
+            )
+            logo.hAlign = "RIGHT"
+            logo_cell = logo
+        except Exception:
+            brand_logo_bytes = None
+
+    if (
+        not brand_logo_bytes
+        and AMT_MARK_TAGLINE.exists()
+    ):
         logo_width = 40 * mm
-        logo_height = logo_width * (835 / 1883)
+        logo_height = logo_width * (
+            835 / 1883
+        )
         logo = RLImage(
             str(AMT_MARK_TAGLINE),
             width=logo_width,
@@ -370,7 +545,7 @@ def _pdf_bytes(title, headers, rows, timezone_name):
         )
         logo.hAlign = "RIGHT"
         logo_cell = logo
-    else:
+    elif not brand_logo_bytes:
         logo_cell = Paragraph(
             "AMT",
             ParagraphStyle(
@@ -501,6 +676,21 @@ def _pdf_bytes(title, headers, rows, timezone_name):
     )
 
     story.append(table)
+    story.append(
+        Spacer(
+            1,
+            4 * mm,
+        )
+    )
+    story.append(
+        Paragraph(
+            (
+                "AMT (Asset Maintenance Tracker) "
+                "by LogiSource Digital"
+            ),
+            sub_style,
+        )
+    )
     doc.build(story)
 
     buf.seek(0)
@@ -514,11 +704,15 @@ def _params(**kwargs):
 @router.get("/export/{dataset}.xlsx")
 async def export_xlsx(
     dataset: str, q: str = "", status: str = "", placement: str = "", type: str = "",
-    low: str = "", entity_type: str = "", sap_no: str = "", serial_no: str = "",
+    category: str = "", low: str = "", entity_type: str = "", sap_no: str = "", serial_no: str = "",
     technician: str = "", failure: str = "", client_id: str = "", job_id: str = "",
     date_from: str = "", date_to: str = "", user: dict = Depends(get_current_user),
 ):
-    params = _params(q=q, status=status, placement=placement, type=type, low=low,
+    await require_feature_enabled(
+        "export_data"
+    )
+
+    params = _params(q=q, status=status, placement=placement, type=type, category=category, low=low,
                      entity_type=entity_type, sap_no=sap_no, serial_no=serial_no,
                      technician=technician, failure=failure, client_id=client_id,
                      job_id=job_id, date_from=date_from, date_to=date_to)
@@ -534,16 +728,29 @@ async def export_xlsx(
 @router.get("/export/{dataset}.pdf")
 async def export_pdf(
     dataset: str, q: str = "", status: str = "", placement: str = "", type: str = "",
-    low: str = "", entity_type: str = "", sap_no: str = "", serial_no: str = "",
+    category: str = "", low: str = "", entity_type: str = "", sap_no: str = "", serial_no: str = "",
     technician: str = "", failure: str = "", client_id: str = "", job_id: str = "",
     date_from: str = "", date_to: str = "", user: dict = Depends(get_current_user),
 ):
-    params = _params(q=q, status=status, placement=placement, type=type, low=low,
+    await require_feature_enabled(
+        "export_data"
+    )
+
+    params = _params(q=q, status=status, placement=placement, type=type, category=category, low=low,
                      entity_type=entity_type, sap_no=sap_no, serial_no=serial_no,
                      technician=technician, failure=failure, client_id=client_id,
                      job_id=job_id, date_from=date_from, date_to=date_to)
     headers, rows = await _dataset(dataset, params, user)
-    data = _pdf_bytes(dataset.title(), headers, rows, await _timezone_name())
+    brand_logo = (
+        await get_pdf_brand_logo_bytes()
+    )
+    data = _pdf_bytes(
+        dataset.title(),
+        headers,
+        rows,
+        await _timezone_name(),
+        brand_logo,
+    )
     return Response(
         content=data,
         media_type="application/pdf",

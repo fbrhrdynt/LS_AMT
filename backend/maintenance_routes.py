@@ -24,6 +24,7 @@ from storage import (
     content_disposition,
 )
 from pdf_report import build_maintenance_pdf
+from branding import get_pdf_brand_logo_bytes
 
 router = APIRouter(prefix="/api")
 
@@ -738,7 +739,16 @@ async def maintenance_pdf(
     settings = await db.settings.find_one({"_id": "app"}) or {}
     currency = settings.get("currency", "USD")
     timezone_name = settings.get("timezone", "Asia/Jakarta")
-    pdf = build_maintenance_pdf(m, eq, currency, timezone_name)
+    brand_logo = (
+        await get_pdf_brand_logo_bytes()
+    )
+    pdf = build_maintenance_pdf(
+        m,
+        eq,
+        currency,
+        timezone_name,
+        brand_logo,
+    )
 
     return Response(
         content=pdf,

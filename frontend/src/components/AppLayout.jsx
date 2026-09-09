@@ -33,6 +33,7 @@ import {
   useAuth,
   canManage,
   canManageUsers,
+  hasLicenseFeature,
   hasMenuAccess,
   isAdmin,
 } from "@/context/AuthContext";
@@ -104,6 +105,7 @@ const NAV = [
     label: "Audit Trail",
     icon: ScrollText,
     key: "aud",
+    feature: "audit_log",
   },
   {
     to: "/users",
@@ -339,8 +341,11 @@ function GlobalSearch() {
 export default function AppLayout({
   children,
 }) {
-  const { user, logout } =
-    useAuth();
+  const {
+    user,
+    license,
+    logout,
+  } = useAuth();
   const loc = useLocation();
 
   const [
@@ -389,6 +394,11 @@ export default function AppLayout({
         canManageUsers(user)) &&
       (!item.manage ||
         canManage(user)) &&
+      (!item.feature ||
+        hasLicenseFeature(
+          license,
+          item.feature
+        )) &&
       hasMenuAccess(user, item.key)
   );
 

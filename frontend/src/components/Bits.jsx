@@ -8,6 +8,7 @@ function pageExportDataset(pathname) {
     "/": "dashboard",
     "/equipment": "equipment",
     "/maintenance": "maintenance",
+    "/calibration": "calibration",
     "/inventory": "inventory",
     "/clients": "clients",
     "/jobs": "jobs",

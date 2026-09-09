@@ -738,6 +738,20 @@ export default function Calibration() {
       <PageHeader
         title="Equipment Calibration"
         subtitle="Calibration tools, certificates, expiry tracking, and equipment assignment"
+        exportQuery={new URLSearchParams({
+          ...(categoryFilter
+            ? {
+                category:
+                  categoryFilter,
+              }
+            : {}),
+          ...(statusFilter
+            ? {
+                status:
+                  statusFilter,
+              }
+            : {}),
+        }).toString()}
       >
         {canEdit(user) && (
           <Btn

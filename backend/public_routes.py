@@ -9,6 +9,8 @@ from PIL import Image, ImageDraw, ImageFont
 from auth import get_current_user, require_roles
 from core import audit_log, db
 from pdf_report import build_maintenance_pdf
+from branding import get_pdf_brand_logo_bytes
+from license_service import qr_equipment_allowed
 from storage import get_object
 from public_access import (
     ensure_equipment_public_token,
@@ -408,10 +410,40 @@ async def _public_location_label(eq: dict) -> str:
 async def _equipment_by_public_token(token: str):
     if not token or len(token) < 20 or len(token) > 200:
         return None
-    return await db.equipment.find_one(
+
+    eq = await db.equipment.find_one(
         {"public_token": token},
         {"_id": 0},
     )
+
+    if not eq:
+        return None
+
+    if not await qr_equipment_allowed(
+        eq.get("id"),
+        claim=False,
+    ):
+        return None
+
+    return eq
+
+
+async def _claim_qr_access(
+    equipment_id: str,
+):
+    allowed = await qr_equipment_allowed(
+        equipment_id,
+        claim=True,
+    )
+
+    if not allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Trial license allows Public QR "
+                "for one equipment only"
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +470,10 @@ async def equipment_public_link(
             status_code=404,
             detail="Equipment not found",
         )
+
+    await _claim_qr_access(
+        eid
+    )
 
     try:
         token = await ensure_equipment_public_token(eid)
@@ -478,6 +514,10 @@ async def equipment_qr_png(
             status_code=404,
             detail="Equipment not found",
         )
+
+    await _claim_qr_access(
+        eid
+    )
 
     try:
         token = await ensure_equipment_public_token(eid)
@@ -540,6 +580,10 @@ async def equipment_qr_label_png(
             detail="Equipment not found",
         )
 
+    await _claim_qr_access(
+        eid
+    )
+
     try:
         token = await ensure_equipment_public_token(eid)
     except LookupError:
@@ -590,6 +634,10 @@ async def reset_public_link(
             status_code=404,
             detail="Equipment not found",
         )
+
+    await _claim_qr_access(
+        eid
+    )
 
     try:
         token = await reset_equipment_public_token(eid)
@@ -895,11 +943,15 @@ async def public_maintenance_pdf(
     )
     currency = settings.get("currency", "USD")
     timezone_name = settings.get("timezone", "Asia/Jakarta")
+    brand_logo = (
+        await get_pdf_brand_logo_bytes()
+    )
     pdf = build_maintenance_pdf(
         maintenance,
         eq,
         currency,
         timezone_name,
+        brand_logo,
     )
 
     filename = _safe_filename(

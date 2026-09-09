@@ -10,6 +10,7 @@ from core import db, audit_log
 from auth import get_current_user, require_roles
 from importer import parse_workbook, _insert_equipment, _insert_maintenance
 from storage import IMPORT_MAX_SIZE, read_upload_limited, validate_workbook_archive
+from license_service import require_feature_enabled
 
 router = APIRouter(prefix="/api")
 MANAGE = require_roles("admin", "supervisor")
@@ -27,9 +28,35 @@ class SettingsBody(BaseModel):
 
 @router.get("/settings")
 async def get_settings(user: dict = Depends(get_current_user)):
-    settings = await db.settings.find_one({"_id": "app"}, {"_id": 0}) or {}
-    settings.setdefault("currency", "USD")
-    settings.setdefault("timezone", "Asia/Jakarta")
+    settings = await db.settings.find_one(
+        {"_id": "app"},
+        {"_id": 0},
+    ) or {}
+
+    settings.setdefault(
+        "currency",
+        "USD",
+    )
+    settings.setdefault(
+        "timezone",
+        "Asia/Jakarta",
+    )
+
+    settings["pdf_logo_configured"] = bool(
+        settings.get(
+            "pdf_logo_path"
+        )
+    )
+
+    settings.pop(
+        "pdf_logo_path",
+        None,
+    )
+    settings.pop(
+        "pdf_logo_content_type",
+        None,
+    )
+
     return settings
 
 
@@ -66,6 +93,10 @@ async def list_audit(
         query["entity_type"] = entity_type
     if entity_id:
         query["entity_id"] = entity_id
+    await require_feature_enabled(
+        "audit_log"
+    )
+
     safe_limit = min(max(1, limit), 1000)
     return await db.audit_logs.find(
         query, {"_id": 0}
