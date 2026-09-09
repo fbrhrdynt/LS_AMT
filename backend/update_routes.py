@@ -175,6 +175,35 @@ async def admin_update_install(
         UPDATER_REQUEST
     )
 
+    # Replace any terminal status from the previous run before
+    # frontend polling starts. Without this, the UI can briefly read
+    # an old "failed" state while the new updater is still starting.
+    status_tmp = (
+        UPDATER_STATUS
+        .with_suffix(".tmp")
+    )
+    status_tmp.write_text(
+        json.dumps(
+            {
+                "phase": "starting",
+                "message": (
+                    f"Starting update "
+                    f"{release['latest_version']}"
+                ),
+                "target_version": (
+                    release[
+                        "latest_version"
+                    ]
+                ),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    status_tmp.replace(
+        UPDATER_STATUS
+    )
+
     try:
         result = subprocess.run(
             [
