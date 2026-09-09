@@ -8,7 +8,7 @@ import {
   RefreshCw,
   Server,
   ShieldCheck,
-  Trash2,
+  RotateCcw,
   Upload,
 } from "lucide-react";
 import {
@@ -97,6 +97,16 @@ export default function SettingsPage() {
   ] = useState(false);
 
   const [
+    appLogoConfigured,
+    setAppLogoConfigured,
+  ] = useState(false);
+
+  const [
+    appLogoVersion,
+    setAppLogoVersion,
+  ] = useState(0);
+
+  const [
     pdfLogoConfigured,
     setPdfLogoConfigured,
   ] = useState(false);
@@ -137,6 +147,12 @@ export default function SettingsPage() {
             data.timezone
           );
         }
+
+        setAppLogoConfigured(
+          Boolean(
+            data?.app_logo_configured
+          )
+        );
 
         setPdfLogoConfigured(
           Boolean(
@@ -297,6 +313,100 @@ export default function SettingsPage() {
       }
     };
 
+
+  const notifyBrandingChanged =
+    () => {
+      window.dispatchEvent(
+        new Event(
+          "amt-branding-changed"
+        )
+      );
+    };
+
+  const uploadAppLogo =
+    async (file) => {
+      if (!file) return;
+
+      setLogoBusy(true);
+
+      try {
+        const fd =
+          new FormData();
+        fd.append(
+          "file",
+          file
+        );
+
+        await api.post(
+          "/settings/app-logo",
+          fd
+        );
+
+        setAppLogoConfigured(
+          true
+        );
+        setAppLogoVersion(
+          Date.now()
+        );
+        notifyBrandingChanged();
+
+        toast.success(
+          "Application logo updated"
+        );
+      } catch (e) {
+        toast.error(
+          formatApiError(
+            e.response?.data
+              ?.detail
+          ) ||
+            "Failed to upload application logo"
+        );
+      } finally {
+        setLogoBusy(false);
+      }
+    };
+
+  const resetAppLogo =
+    async () => {
+      if (
+        !window.confirm(
+          "Reset the application logo to the original AMT logo?"
+        )
+      ) {
+        return;
+      }
+
+      setLogoBusy(true);
+
+      try {
+        await api.delete(
+          "/settings/app-logo"
+        );
+
+        setAppLogoConfigured(
+          false
+        );
+        setAppLogoVersion(
+          Date.now()
+        );
+        notifyBrandingChanged();
+
+        toast.success(
+          "Application logo reset to AMT"
+        );
+      } catch (e) {
+        toast.error(
+          formatApiError(
+            e.response?.data
+              ?.detail
+          ) ||
+            "Failed to reset application logo"
+        );
+      } finally {
+        setLogoBusy(false);
+      }
+    };
+
   const uploadPdfLogo =
     async (file) => {
       if (!file) return;
@@ -362,7 +472,7 @@ export default function SettingsPage() {
           Date.now()
         );
         toast.success(
-          "Company PDF logo removed"
+          "PDF logo reset to AMT"
         );
       } catch (e) {
         toast.error(
@@ -641,40 +751,59 @@ export default function SettingsPage() {
           </Panel>
         )}
 
+
         {canCustomBrand && (
           <Panel className="p-4">
             <div className="flex flex-col gap-4">
               <div>
                 <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
                   <ImagePlus className="h-4 w-4 text-blue-600" />
-                  PDF Company Branding
+                  Application Branding
                   <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">
                     Pro
                   </span>
                 </div>
+
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Replace the AMT header logo in Maintenance and data-export PDFs with your company logo. Every PDF still includes the credit “AMT (Asset Maintenance Tracker) by LogiSource Digital”.
+                  Replace the AMT logo across the application, sign-in screen and generated PDFs with your company logo. The original AMT logo remains built into the application and can be restored everywhere at any time.
                 </p>
               </div>
 
-              {pdfLogoConfigured && (
-                <div className="rounded-md border border-slate-200 bg-white p-3">
-                  <img
-                    src={`${API}/settings/pdf-logo?v=${logoVersion}`}
-                    alt="Company PDF logo"
-                    className="max-h-20 max-w-[280px] object-contain object-left"
-                  />
+              <div className="rounded-md border border-slate-200 bg-white p-3">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Current application logo
                 </div>
-              )}
+
+                <img
+                  src={
+                    appLogoConfigured
+                      ? `${API}/settings/app-logo?v=${appLogoVersion}`
+                      : "/amt-mark.png"
+                  }
+                  alt={
+                    appLogoConfigured
+                      ? "Company application logo"
+                      : "AMT default logo"
+                  }
+                  className="max-h-20 max-w-[300px] object-contain object-left"
+                />
+
+                <div className="mt-2 text-[11px] text-slate-400">
+                  {appLogoConfigured
+                    ? "Custom company logo is active."
+                    : "Original AMT logo is active."}
+                </div>
+              </div>
 
               <div className="flex flex-wrap gap-2">
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-blue-700">
                   <Upload className="h-4 w-4" />
                   {logoBusy
                     ? "Uploading…"
-                    : pdfLogoConfigured
+                    : appLogoConfigured
                       ? "Replace Logo"
-                      : "Upload Logo"}
+                      : "Upload Company Logo"}
+
                   <input
                     type="file"
                     className="hidden"
@@ -686,33 +815,35 @@ export default function SettingsPage() {
                       const file =
                         e.target
                           .files?.[0];
-                      uploadPdfLogo(
+
+                      uploadAppLogo(
                         file
                       );
+
                       e.target.value =
                         "";
                     }}
                   />
                 </label>
 
-                {pdfLogoConfigured && (
+                {appLogoConfigured && (
                   <Btn
-                    variant="danger"
+                    variant="outline"
                     onClick={
-                      removePdfLogo
+                      resetAppLogo
                     }
                     disabled={
                       logoBusy
                     }
                   >
-                    <Trash2 className="h-4 w-4" />
-                    Remove Logo
+                    <RotateCcw className="h-4 w-4" />
+                    Reset to AMT Logo
                   </Btn>
                 )}
               </div>
 
               <div className="text-[11px] text-slate-400">
-                PNG/JPG only, maximum 2 MB.
+                PNG/JPG only, maximum 2 MB. Reset never deletes the built-in AMT logo.
               </div>
             </div>
           </Panel>

@@ -19,8 +19,15 @@ from license_service import (
 APP_ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = APP_ROOT / "VERSION"
 RUNTIME_VERSION_FILE = Path(
-    "/var/lib/amt-updater/current-version"
+    os.environ.get(
+        "AMT_RUNTIME_VERSION_FILE",
+        "/var/lib/amt-updater/current-version",
+    )
 )
+VERSION_OVERRIDE = os.environ.get(
+    "AMT_VERSION_OVERRIDE",
+    "",
+).strip()
 UPDATE_CHANNEL = os.environ.get(
     "AMT_RELEASE_CHANNEL",
     "stable",
@@ -30,6 +37,9 @@ VALID_CHANNELS = {"dev", "beta", "stable"}
 
 
 def current_version() -> str:
+    if VERSION_OVERRIDE:
+        return VERSION_OVERRIDE
+
     for path in (
         RUNTIME_VERSION_FILE,
         VERSION_FILE,

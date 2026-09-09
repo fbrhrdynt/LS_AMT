@@ -685,8 +685,8 @@ def _pdf_bytes(title, headers, rows, timezone_name, brand_logo_bytes=None):
     story.append(
         Paragraph(
             (
-                "AMT (Asset Maintenance Tracker) "
-                "by LogiSource Digital"
+                "Powered by AMT (Asset Maintenance Tracker) "
+                "- LogiSource Digital"
             ),
             sub_style,
         )

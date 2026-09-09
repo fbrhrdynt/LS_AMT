@@ -43,6 +43,7 @@ import {
 } from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
 import { UpdateBanner } from "@/components/UpdateNotice";
+import BrandLogo from "@/components/BrandLogo";
 
 
 const NAV = [
@@ -415,8 +416,8 @@ export default function AppLayout({
       >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-4">
           <div className="min-w-0 flex-1">
-            <img
-              src="/amt-mark.png"
+            <BrandLogo
+              fallback="/amt-mark.png"
               alt="AMT - Asset Maintenance Tracker"
               className="h-auto w-[180px] max-w-full object-contain object-left"
             />

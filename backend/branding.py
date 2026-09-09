@@ -20,14 +20,21 @@ async def get_pdf_brand_logo_bytes():
             {"_id": "app"},
             {
                 "_id": 0,
+                "app_logo_path": 1,
                 "pdf_logo_path": 1,
             },
         )
         or {}
     )
 
+    # Application Branding is the single current logo source.
+    # Keep pdf_logo_path only as a backward-compatible fallback
+    # for installations created before unified branding.
     path = (
         settings.get(
+            "app_logo_path"
+        )
+        or settings.get(
             "pdf_logo_path"
         )
         or ""

@@ -47,15 +47,22 @@ async def get_settings(user: dict = Depends(get_current_user)):
             "pdf_logo_path"
         )
     )
+    settings["app_logo_configured"] = bool(
+        settings.get(
+            "app_logo_path"
+        )
+    )
 
-    settings.pop(
+    for private_key in (
         "pdf_logo_path",
-        None,
-    )
-    settings.pop(
         "pdf_logo_content_type",
-        None,
-    )
+        "app_logo_path",
+        "app_logo_content_type",
+    ):
+        settings.pop(
+            private_key,
+            None,
+        )
 
     return settings
 

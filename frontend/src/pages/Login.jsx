@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { useAuth, formatApiError } from "@/context/AuthContext";
+import BrandLogo from "@/components/BrandLogo";
 
 const LOGIN_IMG = "https://images.unsplash.com/photo-1564182842834-681b7be6de4b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1Mjh8MHwxfHNlYXJjaHwzfHxpbmR1c3RyaWFsJTIwZXF1aXBtZW50JTIwbWFpbnRlbmFuY2V8ZW58MHx8fHwxNzg4MDgxNDY1fDA&ixlib=rb-4.1.0&q=85";
 
@@ -33,7 +34,11 @@ export default function Login() {
       <div className="hidden w-1/2 flex-col justify-between bg-slate-900 p-12 text-white lg:flex relative overflow-hidden">
         <img src={LOGIN_IMG} alt="Industrial maintenance" className="absolute inset-0 h-full w-full object-cover opacity-30" />
         <div className="relative z-10">
-          <img src="/amt-logo-tagline.png" alt="AMT — Asset Maintenance Tracker" className="h-24 w-auto rounded-lg bg-white/95 p-3" />
+          <BrandLogo
+            fallback="/amt-logo-tagline.png"
+            alt="AMT — Asset Maintenance Tracker"
+            className="h-24 max-w-[360px] w-auto rounded-lg bg-white/95 p-3 object-contain object-left"
+          />
         </div>
         <div className="relative z-10 space-y-3">
           <h1 className="font-heading text-4xl font-bold leading-tight">Asset Maintenance Tracker</h1>
@@ -45,7 +50,11 @@ export default function Login() {
       <div className="flex w-full flex-col justify-center px-6 py-12 lg:w-1/2 sm:px-16">
         <div className="mx-auto w-full max-w-sm">
           <div className="mb-8 lg:hidden">
-            <img src="/amt-logo-tagline.png" alt="AMT — Asset Maintenance Tracker" className="h-16 w-auto" />
+            <BrandLogo
+              fallback="/amt-logo-tagline.png"
+              alt="AMT — Asset Maintenance Tracker"
+              className="h-16 max-w-[280px] w-auto object-contain object-left"
+            />
           </div>
           <h2 className="font-heading text-2xl font-bold text-slate-900">Sign in</h2>
           <p className="mt-1 text-sm text-slate-500">Access the maintenance management system</p>

@@ -404,7 +404,7 @@ def build_maintenance_pdf(
     el.append(Paragraph(
         (
             f"Generated on {generated.strftime('%Y-%m-%d %H:%M %Z')} - "
-            "AMT (Asset Maintenance Tracker) by LogiSource Digital"
+            "Powered by AMT (Asset Maintenance Tracker) - LogiSource Digital"
         ),
         ss["Sub"],
     ))

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
 import json
+import os
 import subprocess
 
 from auth import (
@@ -15,8 +16,16 @@ from update_service import (
 router = APIRouter(prefix="/api")
 MASTER_ADMIN = require_roles("master_admin")
 
+APP_ENV = os.environ.get(
+    "APP_ENV",
+    "production",
+).strip().lower()
+
 UPDATER_STATE_ROOT = Path(
-    "/var/lib/amt-updater"
+    os.environ.get(
+        "AMT_UPDATER_STATE_ROOT",
+        "/var/lib/amt-updater",
+    )
 )
 UPDATER_REQUEST = (
     UPDATER_STATE_ROOT
@@ -77,6 +86,15 @@ async def admin_update_status(
 async def admin_update_install(
     user: dict = Depends(MASTER_ADMIN),
 ):
+    if APP_ENV != "production":
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Automatic installation is disabled "
+                "outside production"
+            ),
+        )
+
     release = await check_for_update()
 
     if not release.get(
