@@ -10,6 +10,11 @@ RELEASE_ROOT="/opt/amt-releases/releases"
 PRIVATE_KEY="/opt/amt-signing/amt-release-private.pem"
 PUBLIC_KEY="/etc/amt/keys/amt-release-public.pem"
 RELEASE_HOST="https://release.logisourcedigital.web.id"
+GIT_USER="${SUDO_USER:-ubuntu}"
+
+git_user() {
+  sudo -u "$GIT_USER" -H git -C "$REPO" "$@"
+}
 
 SEMVER_RE='^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'
 
@@ -38,21 +43,21 @@ done
 
 cd "$REPO"
 
-BRANCH="$(git branch --show-current)"
+BRANCH="$(git_user branch --show-current)"
 [ "$BRANCH" = "main" ] || fail "Release must be built from main. Current branch: $BRANCH"
 
-git diff --quiet || fail "Tracked working tree has uncommitted changes."
-git diff --cached --quiet || fail "Staged changes exist."
+git_user diff --quiet || fail "Tracked working tree has uncommitted changes."
+git_user diff --cached --quiet || fail "Staged changes exist."
 
-git fetch origin main --quiet
+git_user fetch origin main --quiet
 
-LOCAL_HEAD="$(git rev-parse HEAD)"
-REMOTE_HEAD="$(git rev-parse origin/main)"
+LOCAL_HEAD="$(git_user rev-parse HEAD)"
+REMOTE_HEAD="$(git_user rev-parse origin/main)"
 
 [ "$LOCAL_HEAD" = "$REMOTE_HEAD" ] || fail "Local main is not exactly origin/main."
 
-SHORT_COMMIT="$(git rev-parse --short=12 HEAD)"
-FULL_COMMIT="$(git rev-parse HEAD)"
+SHORT_COMMIT="$(git_user rev-parse --short=12 HEAD)"
+FULL_COMMIT="$(git_user rev-parse HEAD)"
 
 TARGET_DIR="$RELEASE_ROOT/$VERSION"
 PACKAGE_NAME="amt-$VERSION.tar.gz"
@@ -76,7 +81,7 @@ echo "Building AMT $VERSION from commit $SHORT_COMMIT..."
 
 # Export only committed files. Untracked patches, env, storage, venv,
 # node_modules and build output are not part of git archive.
-git archive --format=tar HEAD | tar -xf - -C "$SOURCE"
+git_user archive --format=tar HEAD | tar -xf - -C "$SOURCE"
 
 # Release package gets its actual target VERSION without changing production.
 printf '%s\n' "$VERSION" > "$SOURCE/VERSION"
