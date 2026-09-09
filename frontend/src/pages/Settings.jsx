@@ -36,6 +36,9 @@ import {
   Panel,
   SelectInput,
 } from "@/components/Bits";
+import {
+  UpdatePanel,
+} from "@/components/UpdateNotice";
 
 const COMMON_TIMEZONES = [
   "UTC",
@@ -387,6 +390,8 @@ export default function SettingsPage() {
       />
 
       <div className="space-y-6">
+        <UpdatePanel />
+
         <Panel className="p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="flex-1">

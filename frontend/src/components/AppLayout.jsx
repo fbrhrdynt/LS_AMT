@@ -42,6 +42,7 @@ import {
   StatusBadge,
 } from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
+import { UpdateBanner } from "@/components/UpdateNotice";
 
 
 const NAV = [
@@ -545,6 +546,8 @@ export default function AppLayout({
             />
           </div>
         </header>
+
+        <UpdateBanner />
 
         <main className="flex-1 overflow-x-hidden p-4 animate-fade-in sm:p-6 lg:p-8">
           {children}
