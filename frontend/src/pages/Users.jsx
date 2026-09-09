@@ -106,10 +106,25 @@ function canManageTarget(actor, target) {
 function MenuCheckboxes({
   value,
   onChange,
+  allowedKeys = ALL_MENU_KEYS,
   disabled = false,
 }) {
+  const allowed = new Set(
+    allowedKeys
+  );
+
+  const visibleOptions =
+    MENU_OPTIONS.filter(
+      ([key]) =>
+        allowed.has(key)
+    );
+
   const selected = new Set(
-    Array.isArray(value) ? value : ALL_MENU_KEYS
+    Array.isArray(value)
+      ? value.filter((key) =>
+          allowed.has(key)
+        )
+      : allowedKeys
   );
 
   const toggle = (key) => {
@@ -118,7 +133,10 @@ function MenuCheckboxes({
     else next.add(key);
 
     onChange(
-      ALL_MENU_KEYS.filter((item) => next.has(item))
+      allowedKeys.filter(
+        (item) =>
+          next.has(item)
+      )
     );
   };
 
@@ -139,7 +157,7 @@ function MenuCheckboxes({
             <button
               type="button"
               className="font-semibold text-blue-600"
-              onClick={() => onChange([...ALL_MENU_KEYS])}
+              onClick={() => onChange([...allowedKeys])}
             >
               Select all
             </button>
@@ -155,7 +173,7 @@ function MenuCheckboxes({
       </div>
 
       <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
-        {MENU_OPTIONS.map(([key, label]) => (
+        {visibleOptions.map(([key, label]) => (
           <label
             key={key}
             className="flex items-center gap-2 rounded bg-white px-3 py-2 text-sm text-slate-700"
@@ -197,6 +215,23 @@ export default function UsersPage() {
     ? "technician"
     : createRoles[0] || "viewer";
 
+  const delegableMenuKeys = useMemo(() => {
+    if (isMasterAdmin(user)) {
+      return [...ALL_MENU_KEYS];
+    }
+
+    if (!Array.isArray(user?.menu_access)) {
+      return [...ALL_MENU_KEYS];
+    }
+
+    return ALL_MENU_KEYS.filter(
+      (key) =>
+        user.menu_access.includes(
+          key
+        )
+    );
+  }, [user]);
+
   const load = async () => {
     try {
       const { data } = await api.get("/users");
@@ -217,7 +252,9 @@ export default function UsersPage() {
     setForm({
       ...empty,
       role: defaultRole,
-      menu_access: [...ALL_MENU_KEYS],
+      menu_access: [
+        ...delegableMenuKeys,
+      ],
     });
     setDialog(true);
   };
@@ -240,7 +277,9 @@ export default function UsersPage() {
       setForm({
         ...empty,
         role: defaultRole,
-        menu_access: [...ALL_MENU_KEYS],
+        menu_access: [
+          ...delegableMenuKeys,
+        ],
       });
       load();
     } catch (error) {
@@ -268,10 +307,22 @@ export default function UsersPage() {
     if (!canManageTarget(user, target)) return;
 
     setAccessTarget(target);
-    setAccessValue(
-      Array.isArray(target.menu_access)
+    const currentAccess =
+      Array.isArray(
+        target.menu_access
+      )
         ? target.menu_access
-        : [...ALL_MENU_KEYS]
+        : [
+            ...ALL_MENU_KEYS,
+          ];
+
+    setAccessValue(
+      delegableMenuKeys.filter(
+        (key) =>
+          currentAccess.includes(
+            key
+          )
+      )
     );
   };
 
@@ -333,7 +384,8 @@ export default function UsersPage() {
         <div className="mt-1 text-xs leading-5 text-slate-500">
           Master Admin can manage all roles. Admin can manage Admin,
           Supervisor, Technician and Viewer. Supervisor can manage
-          Technician and Viewer.
+          Technician and Viewer. A manager can only grant menus already
+          available in their own account.
         </div>
       </div>
 
@@ -521,6 +573,11 @@ export default function UsersPage() {
 
           <MenuCheckboxes
             value={form.menu_access}
+            allowedKeys={
+              masterSelected
+                ? ALL_MENU_KEYS
+                : delegableMenuKeys
+            }
             disabled={masterSelected}
             onChange={(menu_access) =>
               setForm({ ...form, menu_access })
@@ -551,7 +608,16 @@ export default function UsersPage() {
 
           <MenuCheckboxes
             value={accessValue}
-            disabled={accessTarget?.role === "master_admin"}
+            allowedKeys={
+              accessTarget?.role ===
+              "master_admin"
+                ? ALL_MENU_KEYS
+                : delegableMenuKeys
+            }
+            disabled={
+              accessTarget?.role ===
+                "master_admin"
+            }
             onChange={setAccessValue}
           />
 

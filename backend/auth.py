@@ -383,6 +383,47 @@ def _normalize_menu_access(values) -> list[str]:
     ]
 
 
+def _effective_menu_access(user: dict) -> list[str]:
+    if user.get("role") == "master_admin":
+        return list(MENU_KEYS)
+
+    if "menu_access" not in user:
+        return list(MENU_KEYS)
+
+    return _normalize_menu_access(
+        user.get("menu_access")
+    )
+
+
+def _validate_delegated_menu_access(
+    actor: dict,
+    requested,
+) -> list[str]:
+    normalized = _normalize_menu_access(
+        requested
+    )
+    allowed = set(
+        _effective_menu_access(actor)
+    )
+
+    forbidden = [
+        key
+        for key in normalized
+        if key not in allowed
+    ]
+
+    if forbidden:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "You can only grant menu access "
+                "that you already have"
+            ),
+        )
+
+    return normalized
+
+
 @users_router.get("")
 async def list_users(
     user: dict = Depends(
@@ -565,8 +606,9 @@ async def set_menu_access(
     if _effective_role(target) == "master_admin":
         access = list(MENU_KEYS)
     else:
-        access = _normalize_menu_access(
-            body.menu_access
+        access = _validate_delegated_menu_access(
+            user,
+            body.menu_access,
         )
 
     await db.users.update_one(
@@ -658,8 +700,9 @@ async def create_user(
     menu_access = (
         list(MENU_KEYS)
         if requested_role == "master_admin"
-        else _normalize_menu_access(
-            body.menu_access
+        else _validate_delegated_menu_access(
+            user,
+            body.menu_access,
         )
     )
 
