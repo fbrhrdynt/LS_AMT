@@ -211,9 +211,18 @@ def verify_signature(package, signature_b64):
 
 def excluded_member(name):
     cleaned = name.lstrip("./")
+
     for prefix in EXCLUDED_PREFIXES:
-        if cleaned == prefix.rstrip("/") or cleaned.startswith(prefix):
+        if prefix.endswith("/"):
+            base = prefix.rstrip("/")
+            if (
+                cleaned == base
+                or cleaned.startswith(prefix)
+            ):
+                return True
+        elif cleaned == prefix:
             return True
+
     return False
 
 
