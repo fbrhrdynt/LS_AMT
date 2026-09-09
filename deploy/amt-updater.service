@@ -1,0 +1,12 @@
+[Unit]
+Description=LogiSource AMT Secure Updater
+After=network-online.target mongod.service
+Wants=network-online.target
+Requires=mongod.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/sbin/amt-update-runner
+Nice=10

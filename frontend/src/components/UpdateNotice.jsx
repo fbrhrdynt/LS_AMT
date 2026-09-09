@@ -1,12 +1,16 @@
 import {
   ArrowUpCircle,
+  Download,
+  Loader2,
   RefreshCw,
 } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 
 import {
   api,
@@ -21,6 +25,7 @@ import {
   Btn,
   Panel,
 } from "@/components/Bits";
+
 
 export function useUpdateCheck({
   auto = false,
@@ -89,6 +94,7 @@ export function useUpdateCheck({
   };
 }
 
+
 export function UpdateBanner() {
   const {
     allowed,
@@ -109,13 +115,17 @@ export function UpdateBanner() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-2">
           <ArrowUpCircle className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+
           <div>
             <div className="text-sm font-semibold text-blue-900 dark:text-blue-100">
               AMT {update.latest_version} is available
             </div>
+
             <div className="mt-0.5 text-xs text-blue-700 dark:text-blue-300">
               Current version: {update.current_version}
-              {update.title ? ` · ${update.title}` : ""}
+              {update.title
+                ? ` · ${update.title}`
+                : ""}
             </div>
           </div>
         </div>
@@ -131,6 +141,7 @@ export function UpdateBanner() {
   );
 }
 
+
 export function UpdatePanel() {
   const {
     allowed,
@@ -142,9 +153,172 @@ export function UpdatePanel() {
     auto: true,
   });
 
+  const [
+    installBusy,
+    setInstallBusy,
+  ] = useState(false);
+
+  const [
+    updaterStatus,
+    setUpdaterStatus,
+  ] = useState(null);
+
+  const pollRef = useRef(null);
+
+  const stopPolling =
+    useCallback(() => {
+      if (pollRef.current) {
+        window.clearInterval(
+          pollRef.current
+        );
+        pollRef.current =
+          null;
+      }
+    }, []);
+
+  const loadStatus =
+    useCallback(async () => {
+      try {
+        const { data } =
+          await api.get(
+            "/admin/update/status"
+          );
+
+        setUpdaterStatus(
+          data
+        );
+
+        if (
+          [
+            "success",
+            "failed",
+            "busy",
+          ].includes(
+            data?.phase
+          )
+        ) {
+          stopPolling();
+          setInstallBusy(
+            false
+          );
+
+          if (
+            data?.phase ===
+            "success"
+          ) {
+            toast.success(
+              data.message ||
+                "AMT update completed"
+            );
+            await check();
+          }
+
+          if (
+            data?.phase ===
+            "failed"
+          ) {
+            toast.error(
+              data.message ||
+                "AMT update failed"
+            );
+          }
+        }
+      } catch {
+        // Backend restart can temporarily make status polling fail.
+      }
+    }, [
+      check,
+      stopPolling,
+    ]);
+
+  const startPolling =
+    useCallback(() => {
+      stopPolling();
+
+      loadStatus();
+
+      pollRef.current =
+        window.setInterval(
+          loadStatus,
+          2000
+        );
+    }, [
+      loadStatus,
+      stopPolling,
+    ]);
+
+  useEffect(() => {
+    return stopPolling;
+  }, [stopPolling]);
+
+  const installUpdate =
+    async () => {
+      if (
+        !update?.update_available
+      ) {
+        return;
+      }
+
+      if (
+        !window.confirm(
+          `Install AMT ${update.latest_version}? ` +
+          "The system will create backups, rebuild the frontend, " +
+          "restart the backend, and roll back automatically if the health check fails."
+        )
+      ) {
+        return;
+      }
+
+      setInstallBusy(true);
+      setUpdaterStatus({
+        phase: "starting",
+        message:
+          "Starting secure updater",
+      });
+
+      try {
+        const { data } =
+          await api.post(
+            "/admin/update/install"
+          );
+
+        toast.success(
+          data?.message ||
+            "Update started"
+        );
+
+        startPolling();
+      } catch (e) {
+        setInstallBusy(false);
+        toast.error(
+          formatApiError(
+            e.response?.data?.detail
+          ) ||
+            "Could not start update"
+        );
+      }
+    };
+
   if (!allowed) {
     return null;
   }
+
+  const phase =
+    updaterStatus?.phase;
+
+  const running =
+    installBusy ||
+    [
+      "starting",
+      "checking",
+      "downloading",
+      "verifying",
+      "backup",
+      "installing",
+      "building",
+      "restarting",
+      "rollback",
+    ].includes(phase);
 
   return (
     <Panel className="p-4">
@@ -158,27 +332,62 @@ export function UpdatePanel() {
                 Master Admin only
               </span>
             </div>
+
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              Checks signed AMT releases published through LS CRM.
+              Signed releases from LS CRM are verified by SHA256 and the LogiSource public signing key before installation.
             </p>
           </div>
 
-          <Btn
-            variant="outline"
-            onClick={check}
-            disabled={loading}
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
-            />
-            Check Update
-          </Btn>
+          <div className="flex flex-wrap gap-2">
+            <Btn
+              variant="outline"
+              onClick={check}
+              disabled={
+                loading ||
+                running
+              }
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${
+                  loading
+                    ? "animate-spin"
+                    : ""
+                }`}
+              />
+              Check Update
+            </Btn>
+
+            {update?.update_available &&
+              update?.automatic_update_allowed &&
+              !update?.has_database_migration && (
+                <Btn
+                  onClick={
+                    installUpdate
+                  }
+                  disabled={
+                    running
+                  }
+                >
+                  {running ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  {running
+                    ? "Updating…"
+                    : `Install ${update.latest_version}`}
+                </Btn>
+              )}
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
           <Info
             label="Current Version"
-            value={update?.current_version || "—"}
+            value={
+              update?.current_version ||
+              "—"
+            }
           />
           <Info
             label="Latest Version"
@@ -190,7 +399,10 @@ export function UpdatePanel() {
           />
           <Info
             label="Channel"
-            value={update?.channel || "stable"}
+            value={
+              update?.channel ||
+              "stable"
+            }
           />
         </div>
 
@@ -212,25 +424,39 @@ export function UpdatePanel() {
               </pre>
             )}
 
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-blue-700 dark:text-blue-300">
-              {update.mandatory && <span>Mandatory</span>}
-              {update.has_database_migration && (
-                <span>Database migration</span>
-              )}
-              {update.requires_restart && (
-                <span>Restart required</span>
-              )}
-            </div>
-
-            <div className="mt-3 text-[11px] text-blue-700 dark:text-blue-300">
-              Package metadata is ready for the secure updater.
-            </div>
+            {update.has_database_migration && (
+              <div className="mt-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                This release contains a database migration and must be upgraded manually.
+              </div>
+            )}
           </div>
         ) : update && (
           <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
             AMT is up to date.
           </div>
         )}
+
+        {updaterStatus &&
+          updaterStatus.phase !==
+            "idle" && (
+            <div
+              className={`rounded-md border px-3 py-2 text-xs ${
+                updaterStatus.phase ===
+                "failed"
+                  ? "border-red-200 bg-red-50 text-red-700"
+                  : updaterStatus.phase ===
+                      "success"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-slate-200 bg-slate-50 text-slate-600"
+              }`}
+            >
+              <span className="font-semibold uppercase">
+                {updaterStatus.phase}
+              </span>
+              {" — "}
+              {updaterStatus.message}
+            </div>
+          )}
 
         {error && (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
@@ -241,6 +467,7 @@ export function UpdatePanel() {
     </Panel>
   );
 }
+
 
 function Info({
   label,
