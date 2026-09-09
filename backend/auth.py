@@ -304,28 +304,74 @@ async def refresh_token(response: Response, request: Request):
 users_router = APIRouter(prefix="/api/users")
 
 
-@users_router.get("")
-async def list_users(user: dict = Depends(require_roles("admin"))):
-    rows = await db.users.find(
-        {},
-        {"_id": 0, "password_hash": 0},
-    ).to_list(1000)
+CREATABLE_ROLES = {
+    "master_admin": [
+        "master_admin",
+        "admin",
+        "supervisor",
+        "technician",
+        "viewer",
+    ],
+    "admin": [
+        "admin",
+        "supervisor",
+        "technician",
+        "viewer",
+    ],
+    "supervisor": [
+        "technician",
+        "viewer",
+    ],
+}
 
-    hidden_name = "FEBRO HERDYANTO"
-    return [
-        row
-        for row in rows
-        if hidden_name
-        not in str(row.get("name") or "").upper()
-    ]
+
+def _is_febro_name(value: str) -> bool:
+    return (
+        "FEBRO HERDYANTO"
+        in str(value or "").upper()
+    )
 
 
-class RoleBody(BaseModel):
-    role: str
+def _effective_role(target: dict) -> str:
+    if _is_febro_name(target.get("name")):
+        return "master_admin"
+    return target.get("role") or "viewer"
 
 
-class MenuAccessBody(BaseModel):
-    menu_access: list[str] = Field(default_factory=list)
+def _allowed_create_roles(actor: dict) -> list[str]:
+    return list(
+        CREATABLE_ROLES.get(
+            actor.get("role"),
+            [],
+        )
+    )
+
+
+def _can_manage_target(
+    actor: dict,
+    target: dict,
+) -> bool:
+    actor_role = actor.get("role")
+    target_role = _effective_role(target)
+
+    if actor_role == "master_admin":
+        return True
+
+    if actor_role == "admin":
+        return target_role in (
+            "admin",
+            "supervisor",
+            "technician",
+            "viewer",
+        )
+
+    if actor_role == "supervisor":
+        return target_role in (
+            "technician",
+            "viewer",
+        )
+
+    return False
 
 
 def _normalize_menu_access(values) -> list[str]:
@@ -337,33 +383,125 @@ def _normalize_menu_access(values) -> list[str]:
     ]
 
 
-def _is_febro_name(value: str) -> bool:
-    return "FEBRO HERDYANTO" in str(value or "").upper()
+@users_router.get("")
+async def list_users(
+    user: dict = Depends(
+        require_roles(
+            "admin",
+            "supervisor",
+        )
+    ),
+):
+    rows = await db.users.find(
+        {},
+        {
+            "_id": 0,
+            "password_hash": 0,
+        },
+    ).to_list(1000)
+
+    role = user.get("role")
+
+    if role == "master_admin":
+        visible = rows
+    elif role == "admin":
+        visible = [
+            row
+            for row in rows
+            if _effective_role(row)
+            != "master_admin"
+        ]
+    else:
+        visible = [
+            row
+            for row in rows
+            if _effective_role(row)
+            in (
+                "technician",
+                "viewer",
+            )
+        ]
+
+    return [
+        public_user(row)
+        for row in visible
+    ]
+
+
+class RoleBody(BaseModel):
+    role: str
+
+
+class MenuAccessBody(BaseModel):
+    menu_access: list[str] = Field(
+        default_factory=list
+    )
 
 
 @users_router.patch("/{user_id}/role")
 async def set_role(
     user_id: str,
     body: RoleBody,
-    user: dict = Depends(require_roles("admin")),
+    user: dict = Depends(
+        require_roles(
+            "admin",
+            "supervisor",
+        )
+    ),
 ):
     if body.role not in ROLES:
-        raise HTTPException(status_code=400, detail="Invalid role")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid role",
+        )
 
-    target = await db.users.find_one({"id": user_id})
+    if user_id == user["id"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot change your own role",
+        )
+
+    target = await db.users.find_one(
+        {"id": user_id}
+    )
     if not target:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
 
-    if _is_febro_name(target.get("name")):
-        body.role = "master_admin"
-
-    if body.role == "master_admin" and user.get("role") != "master_admin":
+    if not _can_manage_target(
+        user,
+        target,
+    ):
         raise HTTPException(
             status_code=403,
-            detail="Only Master Admin can assign the Master Admin role",
+            detail=(
+                "You cannot manage a user "
+                "at this role level"
+            ),
+        )
+
+    if _is_febro_name(
+        target.get("name")
+    ) and body.role != "master_admin":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "FEBRO HERDYANTO is a "
+                "protected Master Admin account"
+            ),
+        )
+
+    allowed = _allowed_create_roles(user)
+    if body.role not in allowed:
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot assign this role",
         )
 
     updates = {"role": body.role}
+
     if body.role == "master_admin":
         updates["menu_access"] = list(MENU_KEYS)
 
@@ -371,6 +509,7 @@ async def set_role(
         {"id": user_id},
         {"$set": updates},
     )
+
     await audit_log(
         "user",
         user_id,
@@ -378,6 +517,7 @@ async def set_role(
         user,
         f"Role set to {body.role}",
     )
+
     return {"ok": True}
 
 
@@ -385,114 +525,249 @@ async def set_role(
 async def set_menu_access(
     user_id: str,
     body: MenuAccessBody,
-    user: dict = Depends(require_roles("admin")),
+    user: dict = Depends(
+        require_roles(
+            "admin",
+            "supervisor",
+        )
+    ),
 ):
-    target = await db.users.find_one({"id": user_id})
-    if not target:
-        raise HTTPException(status_code=404, detail="User not found")
+    if user_id == user["id"]:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot change your own "
+                "menu access"
+            ),
+        )
 
-    if target.get("role") == "master_admin" or _is_febro_name(target.get("name")):
-        if user.get("role") != "master_admin":
-            raise HTTPException(
-                status_code=403,
-                detail="Only Master Admin can modify a Master Admin account",
-            )
+    target = await db.users.find_one(
+        {"id": user_id}
+    )
+    if not target:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    if not _can_manage_target(
+        user,
+        target,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "You cannot manage a user "
+                "at this role level"
+            ),
+        )
+
+    if _effective_role(target) == "master_admin":
         access = list(MENU_KEYS)
     else:
-        access = _normalize_menu_access(body.menu_access)
+        access = _normalize_menu_access(
+            body.menu_access
+        )
 
     await db.users.update_one(
         {"id": user_id},
-        {"$set": {"menu_access": access}},
+        {
+            "$set": {
+                "menu_access": access
+            }
+        },
     )
+
     await audit_log(
         "user",
         user_id,
         "user.menu_access",
         user,
-        f"Menu access: {', '.join(access) or 'none'}",
+        (
+            "Menu access: "
+            + (
+                ", ".join(access)
+                or "none"
+            )
+        ),
     )
-    return {"ok": True, "menu_access": access}
+
+    return {
+        "ok": True,
+        "menu_access": access,
+    }
 
 
 class NewUserBody(BaseModel):
     email: EmailStr
     name: str
-    password: str = Field(min_length=12, max_length=128)
+    password: str = Field(
+        min_length=12,
+        max_length=128,
+    )
     role: str = "viewer"
-    menu_access: list[str] = Field(default_factory=lambda: list(MENU_KEYS))
+    menu_access: list[str] = Field(
+        default_factory=lambda: list(
+            MENU_KEYS
+        )
+    )
 
 
 @users_router.post("")
 async def create_user(
     body: NewUserBody,
-    user: dict = Depends(require_roles("admin")),
+    user: dict = Depends(
+        require_roles(
+            "admin",
+            "supervisor",
+        )
+    ),
 ):
     email = body.email.lower()
-    if await db.users.find_one({"email": email}):
-        raise HTTPException(status_code=400, detail="Email already registered")
 
-    role = body.role if body.role in ROLES else "viewer"
-    if _is_febro_name(body.name):
-        role = "master_admin"
+    if await db.users.find_one(
+        {"email": email}
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered",
+        )
 
-    if role == "master_admin" and user.get("role") != "master_admin":
-        if not _is_febro_name(body.name):
-            raise HTTPException(
-                status_code=403,
-                detail="Only Master Admin can create another Master Admin",
-            )
+    requested_role = (
+        "master_admin"
+        if _is_febro_name(body.name)
+        else body.role
+    )
+
+    if requested_role not in ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid role",
+        )
+
+    allowed = _allowed_create_roles(user)
+    if requested_role not in allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "You cannot create a user "
+                "with this role"
+            ),
+        )
 
     menu_access = (
         list(MENU_KEYS)
-        if role == "master_admin"
-        else _normalize_menu_access(body.menu_access)
+        if requested_role == "master_admin"
+        else _normalize_menu_access(
+            body.menu_access
+        )
     )
 
     uid = new_id()
+
     doc = {
         "id": uid,
         "email": email,
-        "name": body.name,
-        "password_hash": hash_password(body.password),
-        "role": role,
+        "name": body.name.strip(),
+        "password_hash": hash_password(
+            body.password
+        ),
+        "role": requested_role,
         "menu_access": menu_access,
         "auth_provider": "password",
         "picture": None,
         "created_at": now_iso(),
     }
+
     try:
         await db.users.insert_one(doc)
     except DuplicateKeyError:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    await audit_log("user", uid, "user.create", user, f"Created {email} ({role})")
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered",
+        )
+
+    await audit_log(
+        "user",
+        uid,
+        "user.create",
+        user,
+        f"Created {email} ({requested_role})",
+    )
+
     return public_user(doc)
 
 
 @users_router.delete("/{user_id}")
 async def delete_user(
     user_id: str,
-    user: dict = Depends(require_roles("admin")),
+    user: dict = Depends(
+        require_roles(
+            "admin",
+            "supervisor",
+        )
+    ),
 ):
     if user_id == user["id"]:
-        raise HTTPException(status_code=400, detail="Cannot delete yourself")
-    target = await db.users.find_one({"id": user_id})
-    if not target:
-        raise HTTPException(status_code=404, detail="User not found")
-    if (
-        target.get("role") == "master_admin"
-        or _is_febro_name(target.get("name"))
-    ) and user.get("role") != "master_admin":
         raise HTTPException(
-            status_code=403,
-            detail="Only Master Admin can delete a Master Admin account",
+            status_code=400,
+            detail="Cannot delete yourself",
         )
 
-    result = await db.users.delete_one({"id": user_id})
+    target = await db.users.find_one(
+        {"id": user_id}
+    )
+    if not target:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    if _is_febro_name(
+        target.get("name")
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "FEBRO HERDYANTO is a "
+                "protected Master Admin account"
+            ),
+        )
+
+    if not _can_manage_target(
+        user,
+        target,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "You cannot manage a user "
+                "at this role level"
+            ),
+        )
+
+    result = await db.users.delete_one(
+        {"id": user_id}
+    )
+
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
-    await db.auth_sessions.delete_many({"user_id": user_id})
-    await audit_log("user", user_id, "user.delete", user, "User deleted")
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    await db.auth_sessions.delete_many(
+        {"user_id": user_id}
+    )
+
+    await audit_log(
+        "user",
+        user_id,
+        "user.delete",
+        user,
+        "User deleted",
+    )
+
     return {"ok": True}
 
 

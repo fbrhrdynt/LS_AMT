@@ -24,12 +24,15 @@ import {
   HardHat,
   Settings,
   Gauge,
+  Moon,
+  Sun,
 } from "lucide-react";
 
 import { api } from "@/lib/api";
 import {
   useAuth,
   canManage,
+  canManageUsers,
   hasMenuAccess,
   isAdmin,
 } from "@/context/AuthContext";
@@ -107,7 +110,7 @@ const NAV = [
     label: "Users",
     icon: Users,
     key: "usr",
-    admin: true,
+    userManager: true,
   },
   {
     to: "/settings",
@@ -345,10 +348,45 @@ export default function AppLayout({
     setMobileOpen,
   ] = useState(false);
 
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === "undefined") {
+      return "light";
+    }
+
+    return (
+      window.localStorage.getItem("amt-theme") ||
+      "light"
+    );
+  });
+
+  useEffect(() => {
+    const dark = theme === "dark";
+
+    document.documentElement.classList.toggle(
+      "dark",
+      dark
+    );
+
+    window.localStorage.setItem(
+      "amt-theme",
+      theme
+    );
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((current) =>
+      current === "dark"
+        ? "light"
+        : "dark"
+    );
+  };
+
   const items = NAV.filter(
     (item) =>
       (!item.admin ||
         isAdmin(user)) &&
+      (!item.userManager ||
+        canManageUsers(user)) &&
       (!item.manage ||
         canManage(user)) &&
       hasMenuAccess(user, item.key)
@@ -436,8 +474,28 @@ export default function AppLayout({
 
           <button
             type="button"
+            onClick={toggleTheme}
+            className="mt-2 flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
+            title={
+              theme === "dark"
+                ? "Switch to Light Mode"
+                : "Switch to Dark Mode"
+            }
+          >
+            {theme === "dark" ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+            {theme === "dark"
+              ? "Light Mode"
+              : "Dark Mode"}
+          </button>
+
+          <button
+            type="button"
             onClick={logout}
-            className="mt-2 flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600"
+            className="mt-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600"
           >
             <LogOut className="h-4 w-4" />
             Sign out

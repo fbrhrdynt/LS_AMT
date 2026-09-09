@@ -16,6 +16,7 @@ import {
   formatApiError,
 } from "@/lib/api";
 import {
+  canManageUsers,
   isMasterAdmin,
   useAuth,
 } from "@/context/AuthContext";
@@ -35,7 +36,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-
 const MENU_OPTIONS = [
   ["dash", "Dashboard"],
   ["eq", "Equipment"],
@@ -51,15 +51,27 @@ const MENU_OPTIONS = [
   ["set", "Settings"],
 ];
 
-const ALL_MENU_KEYS =
-  MENU_OPTIONS.map(([key]) => key);
+const ALL_MENU_KEYS = MENU_OPTIONS.map(([key]) => key);
 
-const STANDARD_ROLES = [
-  "admin",
-  "supervisor",
-  "technician",
-  "viewer",
-];
+const ROLE_OPTIONS = {
+  master_admin: [
+    "master_admin",
+    "admin",
+    "supervisor",
+    "technician",
+    "viewer",
+  ],
+  admin: [
+    "admin",
+    "supervisor",
+    "technician",
+    "viewer",
+  ],
+  supervisor: [
+    "technician",
+    "viewer",
+  ],
+};
 
 const empty = {
   email: "",
@@ -69,6 +81,27 @@ const empty = {
   menu_access: [...ALL_MENU_KEYS],
 };
 
+function isFebro(target) {
+  return String(target?.name || "")
+    .toUpperCase()
+    .includes("FEBRO HERDYANTO");
+}
+
+function availableRoles(actor) {
+  return ROLE_OPTIONS[actor?.role] || [];
+}
+
+function canManageTarget(actor, target) {
+  if (!actor || !target) return false;
+  if (isMasterAdmin(actor)) return true;
+  if (actor.role === "admin") {
+    return target.role !== "master_admin";
+  }
+  if (actor.role === "supervisor") {
+    return ["technician", "viewer"].includes(target.role);
+  }
+  return false;
+}
 
 function MenuCheckboxes({
   value,
@@ -76,24 +109,16 @@ function MenuCheckboxes({
   disabled = false,
 }) {
   const selected = new Set(
-    Array.isArray(value)
-      ? value
-      : ALL_MENU_KEYS
+    Array.isArray(value) ? value : ALL_MENU_KEYS
   );
 
   const toggle = (key) => {
     const next = new Set(selected);
-
-    if (next.has(key)) {
-      next.delete(key);
-    } else {
-      next.add(key);
-    }
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
 
     onChange(
-      ALL_MENU_KEYS.filter((item) =>
-        next.has(item)
-      )
+      ALL_MENU_KEYS.filter((item) => next.has(item))
     );
   };
 
@@ -114,18 +139,14 @@ function MenuCheckboxes({
             <button
               type="button"
               className="font-semibold text-blue-600"
-              onClick={() =>
-                onChange([...ALL_MENU_KEYS])
-              }
+              onClick={() => onChange([...ALL_MENU_KEYS])}
             >
               Select all
             </button>
             <button
               type="button"
               className="font-semibold text-slate-500"
-              onClick={() =>
-                onChange([])
-              }
+              onClick={() => onChange([])}
             >
               Clear
             </button>
@@ -134,27 +155,20 @@ function MenuCheckboxes({
       </div>
 
       <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
-        {MENU_OPTIONS.map(
-          ([key, label]) => (
-            <label
-              key={key}
-              className="flex items-center gap-2 rounded bg-white px-3 py-2 text-sm text-slate-700"
-            >
-              <input
-                type="checkbox"
-                checked={
-                  disabled ||
-                  selected.has(key)
-                }
-                disabled={disabled}
-                onChange={() =>
-                  toggle(key)
-                }
-              />
-              {label}
-            </label>
-          )
-        )}
+        {MENU_OPTIONS.map(([key, label]) => (
+          <label
+            key={key}
+            className="flex items-center gap-2 rounded bg-white px-3 py-2 text-sm text-slate-700"
+          >
+            <input
+              type="checkbox"
+              checked={disabled || selected.has(key)}
+              disabled={disabled}
+              onChange={() => toggle(key)}
+            />
+            {label}
+          </label>
+        ))}
       </div>
 
       {disabled && (
@@ -166,320 +180,273 @@ function MenuCheckboxes({
   );
 }
 
-
 export default function UsersPage() {
   const { user } = useAuth();
+  const [users, setUsers] = useState([]);
+  const [dialog, setDialog] = useState(false);
+  const [form, setForm] = useState(empty);
+  const [accessTarget, setAccessTarget] = useState(null);
+  const [accessValue, setAccessValue] = useState([]);
 
-  const [users, setUsers] =
-    useState([]);
-  const [dialog, setDialog] =
-    useState(false);
-  const [form, setForm] =
-    useState(empty);
-
-  const [accessTarget, setAccessTarget] =
-    useState(null);
-  const [accessValue, setAccessValue] =
-    useState([]);
-
-  const roleOptions = useMemo(
-    () =>
-      isMasterAdmin(user)
-        ? [
-            "master_admin",
-            ...STANDARD_ROLES,
-          ]
-        : STANDARD_ROLES,
+  const createRoles = useMemo(
+    () => availableRoles(user),
     [user]
   );
 
+  const defaultRole = createRoles.includes("technician")
+    ? "technician"
+    : createRoles[0] || "viewer";
+
   const load = async () => {
     try {
-      const { data } =
-        await api.get("/users");
+      const { data } = await api.get("/users");
       setUsers(data);
     } catch (error) {
       toast.error(
-        formatApiError(
-          error.response?.data?.detail
-        ) ||
+        formatApiError(error.response?.data?.detail) ||
           "Failed to load users"
       );
     }
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    if (canManageUsers(user)) load();
+  }, [user]);
 
   const openCreate = () => {
     setForm({
       ...empty,
-      menu_access: [
-        ...ALL_MENU_KEYS,
-      ],
+      role: defaultRole,
+      menu_access: [...ALL_MENU_KEYS],
     });
     setDialog(true);
   };
 
   const create = async () => {
-    if (
-      !form.email ||
-      !form.password
-    ) {
-      toast.error(
-        "Email and password required"
-      );
+    if (!form.email || !form.password) {
+      toast.error("Email and password required");
+      return;
+    }
+
+    if (!createRoles.includes(form.role)) {
+      toast.error("You cannot create this role");
       return;
     }
 
     try {
-      await api.post(
-        "/users",
-        form
-      );
-
-      toast.success(
-        "User created"
-      );
+      await api.post("/users", form);
+      toast.success("User created");
       setDialog(false);
       setForm({
         ...empty,
-        menu_access: [
-          ...ALL_MENU_KEYS,
-        ],
+        role: defaultRole,
+        menu_access: [...ALL_MENU_KEYS],
       });
       load();
     } catch (error) {
       toast.error(
-        formatApiError(
-          error.response?.data?.detail
-        )
+        formatApiError(error.response?.data?.detail)
       );
     }
   };
 
-  const changeRole = async (
-    id,
-    role
-  ) => {
+  const changeRole = async (target, role) => {
+    if (!canManageTarget(user, target)) return;
+
     try {
-      await api.patch(
-        `/users/${id}/role`,
-        { role }
-      );
-      toast.success(
-        "Role updated"
-      );
+      await api.patch(`/users/${target.id}/role`, { role });
+      toast.success("Role updated");
       load();
     } catch (error) {
       toast.error(
-        formatApiError(
-          error.response?.data?.detail
-        )
+        formatApiError(error.response?.data?.detail)
       );
     }
   };
 
   const openAccess = (target) => {
+    if (!canManageTarget(user, target)) return;
+
     setAccessTarget(target);
     setAccessValue(
-      Array.isArray(
-        target.menu_access
-      )
+      Array.isArray(target.menu_access)
         ? target.menu_access
         : [...ALL_MENU_KEYS]
     );
   };
 
   const saveAccess = async () => {
-    if (!accessTarget) {
-      return;
-    }
+    if (!accessTarget) return;
 
     try {
-      await api.patch(
-        `/users/${accessTarget.id}/access`,
-        {
-          menu_access:
-            accessValue,
-        }
-      );
-
-      toast.success(
-        "Menu access updated"
-      );
+      await api.patch(`/users/${accessTarget.id}/access`, {
+        menu_access: accessValue,
+      });
+      toast.success("Menu access updated");
       setAccessTarget(null);
       load();
     } catch (error) {
       toast.error(
-        formatApiError(
-          error.response?.data?.detail
-        )
+        formatApiError(error.response?.data?.detail)
       );
     }
   };
 
-  const remove = async (id) => {
-    if (
-      !window.confirm(
-        "Delete this user?"
-      )
-    ) {
+  const remove = async (target) => {
+    if (!canManageTarget(user, target) || isFebro(target)) {
+      return;
+    }
+
+    if (!window.confirm(`Delete user ${target.name}?`)) {
       return;
     }
 
     try {
-      await api.delete(
-        `/users/${id}`
-      );
+      await api.delete(`/users/${target.id}`);
       toast.success("Deleted");
       load();
     } catch (error) {
       toast.error(
-        formatApiError(
-          error.response?.data?.detail
-        )
+        formatApiError(error.response?.data?.detail)
       );
     }
   };
 
-  const masterSelected =
-    form.role === "master_admin";
+  const masterSelected = form.role === "master_admin";
 
   return (
     <div>
       <PageHeader
         title="Users"
-        subtitle="Manage accounts, roles, and menu access"
+        subtitle="Role hierarchy and menu access"
       >
-        <Btn
-          onClick={openCreate}
-          data-testid="add-user-btn"
-        >
+        <Btn onClick={openCreate} data-testid="add-user-btn">
           <Plus className="h-4 w-4" />
           Add User
         </Btn>
       </PageHeader>
+
+      <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
+        <div className="font-semibold text-slate-800">
+          User hierarchy
+        </div>
+        <div className="mt-1 text-xs leading-5 text-slate-500">
+          Master Admin can manage all roles. Admin can manage Admin,
+          Supervisor, Technician and Viewer. Supervisor can manage
+          Technician and Viewer.
+        </div>
+      </div>
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-sm">
             <thead className="bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">
-                  Name
-                </th>
-                <th className="px-4 py-3">
-                  Email
-                </th>
-                <th className="px-4 py-3">
-                  Provider
-                </th>
-                <th className="px-4 py-3">
-                  Role
-                </th>
-                <th className="px-4 py-3">
-                  Menu Access
-                </th>
-                <th className="px-4 py-3">
-                  Created
-                </th>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Provider</th>
+                <th className="px-4 py-3">Role</th>
+                <th className="px-4 py-3">Menu Access</th>
+                <th className="px-4 py-3">Created</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-100">
-              {users.map((u) => {
-                const access =
-                  Array.isArray(
-                    u.menu_access
-                  )
-                    ? u.menu_access
-                    : ALL_MENU_KEYS;
+              {users.map((target) => {
+                const access = Array.isArray(target.menu_access)
+                  ? target.menu_access
+                  : ALL_MENU_KEYS;
+                const manageable = canManageTarget(user, target);
+                const protectedOwner = isFebro(target);
+                const targetRoleOptions = availableRoles(user);
 
                 return (
                   <tr
-                    key={u.id}
+                    key={target.id}
                     className="hover:bg-slate-50"
                   >
                     <td className="px-4 py-3 font-medium text-slate-900">
-                      {u.name}
+                      <div className="flex items-center gap-2">
+                        <span>{target.name}</span>
+                        {protectedOwner && (
+                          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                            Owner
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     <td className="px-4 py-3 text-slate-600">
-                      {u.email}
+                      {target.email}
                     </td>
 
                     <td className="px-4 py-3 text-slate-500">
-                      {u.auth_provider}
+                      {target.auth_provider}
                     </td>
 
                     <td className="px-4 py-3">
                       <select
-                        value={u.role}
+                        value={target.role}
                         onChange={(event) =>
-                          changeRole(
-                            u.id,
-                            event.target.value
-                          )
+                          changeRole(target, event.target.value)
                         }
                         disabled={
-                          u.id === user.id
+                          !manageable ||
+                          target.id === user.id ||
+                          protectedOwner
                         }
-                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {roleOptions.map(
-                          (role) => (
-                            <option
-                              key={role}
-                              value={role}
-                            >
-                              {role}
-                            </option>
-                          )
+                        {!targetRoleOptions.includes(target.role) && (
+                          <option value={target.role}>
+                            {target.role}
+                          </option>
                         )}
+
+                        {targetRoleOptions.map((role) => (
+                          <option key={role} value={role}>
+                            {role}
+                          </option>
+                        ))}
                       </select>
                     </td>
 
                     <td className="px-4 py-3">
                       <button
                         type="button"
-                        onClick={() =>
-                          openAccess(u)
+                        disabled={
+                          !manageable ||
+                          target.id === user.id ||
+                          target.role === "master_admin"
                         }
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                        onClick={() => openAccess(target)}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <KeyRound className="h-3.5 w-3.5" />
-                        {u.role ===
-                        "master_admin"
+                        {target.role === "master_admin"
                           ? "All menus"
                           : `${access.length} menu(s)`}
                       </button>
                     </td>
 
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                      {fmtDate(
-                        u.created_at
-                      )}
+                      {fmtDate(target.created_at)}
                     </td>
 
                     <td className="px-4 py-3 text-right">
-                      {u.id !==
-                        user.id && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            remove(
-                              u.id
-                            )
-                          }
-                          className="text-slate-400 hover:text-red-600"
-                          title="Delete user"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
+                      {target.id !== user.id &&
+                        manageable &&
+                        !protectedOwner && (
+                          <button
+                            type="button"
+                            onClick={() => remove(target)}
+                            className="text-slate-400 hover:text-red-600"
+                            title="Delete user"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                     </td>
                   </tr>
                 );
@@ -491,31 +458,22 @@ export default function UsersPage() {
         {users.length === 0 && (
           <EmptyState
             icon={UsersIcon}
-            text="No visible users"
+            text="No users available for this role"
           />
         )}
       </div>
 
-      <Dialog
-        open={dialog}
-        onOpenChange={setDialog}
-      >
+      <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              Add User
-            </DialogTitle>
+            <DialogTitle>Add User</DialogTitle>
           </DialogHeader>
 
           <TextInput
             label="Name"
             value={form.name}
             onChange={(event) =>
-              setForm({
-                ...form,
-                name:
-                  event.target.value,
-              })
+              setForm({ ...form, name: event.target.value })
             }
           />
 
@@ -525,11 +483,7 @@ export default function UsersPage() {
             required
             value={form.email}
             onChange={(event) =>
-              setForm({
-                ...form,
-                email:
-                  event.target.value,
-              })
+              setForm({ ...form, email: event.target.value })
             }
           />
 
@@ -539,11 +493,7 @@ export default function UsersPage() {
             required
             value={form.password}
             onChange={(event) =>
-              setForm({
-                ...form,
-                password:
-                  event.target.value,
-              })
+              setForm({ ...form, password: event.target.value })
             }
           />
 
@@ -551,61 +501,37 @@ export default function UsersPage() {
             label="Role"
             value={form.role}
             onChange={(event) => {
-              const role =
-                event.target.value;
-
+              const role = event.target.value;
               setForm({
                 ...form,
                 role,
                 menu_access:
-                  role ===
-                  "master_admin"
-                    ? [
-                        ...ALL_MENU_KEYS,
-                      ]
+                  role === "master_admin"
+                    ? [...ALL_MENU_KEYS]
                     : form.menu_access,
               });
             }}
           >
-            {roleOptions.map(
-              (role) => (
-                <option
-                  key={role}
-                  value={role}
-                >
-                  {role}
-                </option>
-              )
-            )}
+            {createRoles.map((role) => (
+              <option key={role} value={role}>
+                {role}
+              </option>
+            ))}
           </SelectInput>
 
           <MenuCheckboxes
             value={form.menu_access}
-            disabled={
-              masterSelected
-            }
-            onChange={(
-              menu_access
-            ) =>
-              setForm({
-                ...form,
-                menu_access,
-              })
+            disabled={masterSelected}
+            onChange={(menu_access) =>
+              setForm({ ...form, menu_access })
             }
           />
 
           <DialogFooter>
-            <Btn
-              variant="outline"
-              onClick={() =>
-                setDialog(false)
-              }
-            >
+            <Btn variant="outline" onClick={() => setDialog(false)}>
               Cancel
             </Btn>
-            <Btn onClick={create}>
-              Create
-            </Btn>
+            <Btn onClick={create}>Create</Btn>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -613,47 +539,29 @@ export default function UsersPage() {
       <Dialog
         open={Boolean(accessTarget)}
         onOpenChange={(open) => {
-          if (!open) {
-            setAccessTarget(null);
-          }
+          if (!open) setAccessTarget(null);
         }}
       >
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              Menu Access —{" "}
-              {accessTarget?.name}
+              Menu Access — {accessTarget?.name}
             </DialogTitle>
           </DialogHeader>
 
           <MenuCheckboxes
             value={accessValue}
-            disabled={
-              accessTarget?.role ===
-              "master_admin"
-            }
-            onChange={
-              setAccessValue
-            }
+            disabled={accessTarget?.role === "master_admin"}
+            onChange={setAccessValue}
           />
 
           <DialogFooter>
-            <Btn
-              variant="outline"
-              onClick={() =>
-                setAccessTarget(
-                  null
-                )
-              }
-            >
+            <Btn variant="outline" onClick={() => setAccessTarget(null)}>
               Cancel
             </Btn>
             <Btn
               onClick={saveAccess}
-              disabled={
-                accessTarget?.role ===
-                "master_admin"
-              }
+              disabled={accessTarget?.role === "master_admin"}
             >
               Save Access
             </Btn>

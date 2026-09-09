@@ -86,6 +86,16 @@ export const isAdmin = (user) =>
       ["master_admin", "admin"].includes(user.role)
   );
 
+export const canManageUsers = (user) =>
+  Boolean(
+    user &&
+      [
+        "master_admin",
+        "admin",
+        "supervisor",
+      ].includes(user.role)
+  );
+
 export const hasMenuAccess = (user, key) => {
   if (!user) return false;
   if (isMasterAdmin(user)) return true;

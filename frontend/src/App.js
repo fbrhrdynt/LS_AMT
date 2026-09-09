@@ -6,6 +6,7 @@ import {
   AuthProvider,
   useAuth,
   canManage,
+  canManageUsers,
   hasMenuAccess,
   isAdmin,
 } from "@/context/AuthContext";
@@ -98,7 +99,7 @@ function AppRoutes() {
       <Route path="/import" element={<RoleRoute allow={canManage} menu="imp"><ImportWizard /></RoleRoute>} />
       <Route path="/reports" element={<Protected menu="rep"><Reports /></Protected>} />
       <Route path="/audit" element={<Protected menu="aud"><Audit /></Protected>} />
-      <Route path="/users" element={<RoleRoute allow={isAdmin} menu="usr"><UsersPage /></RoleRoute>} />
+      <Route path="/users" element={<RoleRoute allow={canManageUsers} menu="usr"><UsersPage /></RoleRoute>} />
       <Route path="/settings" element={<RoleRoute allow={isAdmin} menu="set"><SettingsPage /></RoleRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
