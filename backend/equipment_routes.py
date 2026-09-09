@@ -176,6 +176,9 @@ async def delete_equipment(eid: str, user: dict = Depends(MANAGE)):
         "assignments": await db.assignments.count_documents({"equipment_id": eid}),
         "documents": await db.files.count_documents({"equipment_id": eid}),
         "inventory_transactions": await db.inventory_transactions.count_documents({"equipment_id": eid}),
+        "calibration_tools": await db.calibration_tools.count_documents(
+            {"equipment_id": eid, "is_deleted": {"$ne": True}}
+        ),
     }
     used = {k: v for k, v in history.items() if v}
     if used:

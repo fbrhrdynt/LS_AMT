@@ -12,6 +12,7 @@ from auth import auth_router, users_router, seed_admin
 from equipment_routes import router as equipment_router
 from maintenance_routes import router as maintenance_router
 from inventory_routes import router as inventory_router
+from calibration_routes import router as calibration_router
 from jobs_routes import router as jobs_router
 from misc_routes import router as misc_router
 from admin_routes import router as admin_router
@@ -118,6 +119,7 @@ app.include_router(users_router)
 app.include_router(equipment_router)
 app.include_router(maintenance_router)
 app.include_router(inventory_router)
+app.include_router(calibration_router)
 app.include_router(jobs_router)
 app.include_router(misc_router)
 app.include_router(admin_router)
@@ -206,6 +208,41 @@ async def _ensure_indexes():
         partialFilterExpression=partial_string("item_code"),
     )
 
+    await db.calibration_tools.create_index(
+        "id", unique=True, name="uniq_calibration_tool_id",
+        partialFilterExpression=partial_string("id"),
+    )
+    await db.calibration_tools.create_index(
+        "tool_id", unique=True, name="uniq_calibration_tool_code",
+        partialFilterExpression=partial_string("tool_id"),
+    )
+    await db.calibration_tools.create_index(
+        "category", name="idx_calibration_category"
+    )
+    await db.calibration_tools.create_index(
+        "equipment_id", name="idx_calibration_equipment"
+    )
+    await db.calibration_tools.create_index(
+        "expired_date", name="idx_calibration_expired"
+    )
+    await db.calibration_certificates.create_index(
+        "id", unique=True, name="uniq_calibration_certificate_id",
+        partialFilterExpression=partial_string("id"),
+    )
+    await db.calibration_certificates.create_index(
+        "calibration_tool_id", name="idx_calibration_certificate_tool"
+    )
+    await db.calibration_certificates.create_index(
+        "equipment_id", name="idx_calibration_certificate_equipment"
+    )
+    await db.calibration_assignments.create_index(
+        "id", unique=True, name="uniq_calibration_assignment_id",
+        partialFilterExpression=partial_string("id"),
+    )
+    await db.calibration_assignments.create_index(
+        "calibration_tool_id", name="idx_calibration_assignment_tool"
+    )
+
     await db.inventory_transactions.create_index(
         "id", unique=True, name="uniq_inventory_tx_id",
         partialFilterExpression=partial_string("id"),
@@ -220,6 +257,9 @@ async def _ensure_indexes():
     )
     await db.files.create_index("maintenance_id", name="idx_file_maintenance")
     await db.files.create_index("equipment_id", name="idx_file_equipment")
+    await db.files.create_index(
+        "calibration_tool_id", name="idx_file_calibration_tool"
+    )
 
     await db.location_history.create_index("equipment_id", name="idx_location_equipment")
     await db.audit_logs.create_index("timestamp", name="idx_audit_timestamp")

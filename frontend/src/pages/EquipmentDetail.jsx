@@ -967,11 +967,11 @@ export default function EquipmentDetail() {
 
         {/* DOCUMENTS */}
         <TabsContent value="documents">
-          <Panel title="Maintenance Documents">
+          <Panel title="Equipment Documents">
             <div className="border-b border-slate-100 px-4 py-3 text-xs leading-5 text-slate-500">
-              Documents are uploaded from each maintenance record.
-              This tab is an equipment-level index of all maintenance
-              attachments.
+              Maintenance attachments are indexed here together with
+              calibration certificates assigned to this equipment. Calibration
+              certificate files are uploaded only from the Calibration menu.
             </div>
 
             <div className="overflow-x-auto">
@@ -1008,16 +1008,22 @@ export default function EquipmentDetail() {
                       >
                         <td className="px-4 py-3 font-mono text-xs font-semibold text-blue-600">
                           {m?.mnt_no ||
-                            "Unassigned / Legacy"}
+                            (file.source === "calibration"
+                              ? file.tool_id || "Calibration"
+                              : "Unassigned / Legacy")}
                         </td>
 
                         <td className="px-4 py-3 text-slate-700">
-                          {m?.type_of_maintenance || "—"}
+                          {m?.type_of_maintenance ||
+                            (file.source === "calibration"
+                              ? "Calibration Tool"
+                              : "—")}
                         </td>
 
                         <td className="px-4 py-3 font-mono text-xs text-slate-500">
                           {fmtDate(
                             m?.maintenance_date ||
+                              file.calibration_date ||
                               file.created_at
                           )}
                         </td>
@@ -1050,7 +1056,7 @@ export default function EquipmentDetail() {
             {documentRows.length === 0 && (
               <EmptyState
                 icon={FileText}
-                text="No maintenance documents uploaded"
+                text="No equipment documents available"
               />
             )}
           </Panel>

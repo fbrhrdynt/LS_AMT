@@ -23,6 +23,7 @@ import {
   X,
   HardHat,
   Settings,
+  Gauge,
 } from "lucide-react";
 
 import { api } from "@/lib/api";
@@ -56,6 +57,12 @@ const NAV = [
     label: "Maintenance",
     icon: Wrench,
     key: "mnt",
+  },
+  {
+    to: "/calibration",
+    label: "Calibration",
+    icon: Gauge,
+    key: "cal",
   },
   {
     to: "/inventory",

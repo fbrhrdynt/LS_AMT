@@ -15,6 +15,7 @@ import Dashboard from "@/pages/Dashboard";
 import EquipmentList from "@/pages/EquipmentList";
 import EquipmentDetail from "@/pages/EquipmentDetail";
 import MaintenanceList from "@/pages/MaintenanceList";
+import Calibration from "@/pages/Calibration";
 import Inventory from "@/pages/Inventory";
 import Clients from "@/pages/Clients";
 import Jobs from "@/pages/Jobs";
@@ -70,6 +71,7 @@ function AppRoutes() {
       <Route path="/equipment" element={<Protected><EquipmentList /></Protected>} />
       <Route path="/equipment/:id" element={<Protected><EquipmentDetail /></Protected>} />
       <Route path="/maintenance" element={<Protected><MaintenanceList /></Protected>} />
+      <Route path="/calibration" element={<Protected><Calibration /></Protected>} />
       <Route path="/inventory" element={<Protected><Inventory /></Protected>} />
       <Route path="/clients" element={<Protected><Clients /></Protected>} />
       <Route path="/jobs" element={<Protected><Jobs /></Protected>} />

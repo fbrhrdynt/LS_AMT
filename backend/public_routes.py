@@ -672,8 +672,62 @@ async def public_equipment(token: str):
                 "size": 1,
                 "doc_type": 1,
                 "created_at": 1,
+                "source": 1,
             },
         ).sort("created_at", 1).to_list(5000)
+
+    calibration_documents = await db.files.find(
+        {
+            "equipment_id": eq["id"],
+            "source": "calibration",
+            "doc_type": "Calibration Certificate",
+            "is_deleted": False,
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "maintenance_id": 1,
+            "original_filename": 1,
+            "content_type": 1,
+            "size": 1,
+            "doc_type": 1,
+            "created_at": 1,
+            "source": 1,
+            "calibration_tool_id": 1,
+            "tool_id": 1,
+            "tool_name": 1,
+            "category": 1,
+            "cert_number": 1,
+            "calibration_date": 1,
+            "expired_date": 1,
+            "calibrated_by": 1,
+        },
+    ).sort("created_at", 1).to_list(5000)
+
+    documents.extend(calibration_documents)
+
+    calibrations = await db.calibration_tools.find(
+        {
+            "equipment_id": eq["id"],
+            "is_deleted": {"$ne": True},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "tool_id": 1,
+            "tool_name": 1,
+            "category": 1,
+            "manufacturer": 1,
+            "model": 1,
+            "range_spec": 1,
+            "calibration_date": 1,
+            "frequency_value": 1,
+            "frequency_unit": 1,
+            "expired_date": 1,
+            "cert_number": 1,
+            "calibrated_by": 1,
+        },
+    ).sort("category", 1).to_list(1000)
 
     return Response(
         content=__import__("json").dumps(
@@ -683,6 +737,8 @@ async def public_equipment(token: str):
                 "maintenance_count": len(maintenance),
                 "documents": documents,
                 "document_count": len(documents),
+                "calibrations": calibrations,
+                "calibration_count": len(calibrations),
             },
             default=str,
         ),
@@ -722,7 +778,6 @@ async def public_maintenance_document(
         {
             "id": file_id,
             "is_deleted": False,
-            "maintenance_id": {"$nin": [None, ""]},
         },
         {"_id": 0},
     )
@@ -732,23 +787,42 @@ async def public_maintenance_document(
             detail="Document not found",
         )
 
-    maintenance = await db.maintenance.find_one(
-        {
-            "id": file_rec.get("maintenance_id"),
-            "equipment_id": eq["id"],
-            "status": "Closed",
-        },
-        {
-            "_id": 0,
-            "id": 1,
-        },
-    )
-    if not maintenance:
-        # Same response for wrong equipment, Open maintenance, or revoked file.
-        raise HTTPException(
-            status_code=404,
-            detail="Document not found",
+    if file_rec.get("source") == "calibration":
+        if (
+            file_rec.get("equipment_id") != eq["id"]
+            or file_rec.get("doc_type")
+            != "Calibration Certificate"
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found",
+            )
+    else:
+        maintenance_id = file_rec.get("maintenance_id")
+        if not maintenance_id:
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found",
+            )
+
+        maintenance = await db.maintenance.find_one(
+            {
+                "id": maintenance_id,
+                "equipment_id": eq["id"],
+                "status": "Closed",
+            },
+            {
+                "_id": 0,
+                "id": 1,
+            },
         )
+        if not maintenance:
+            # Same response for wrong equipment, Open maintenance,
+            # or revoked file.
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found",
+            )
 
     try:
         data, detected_type = get_object(

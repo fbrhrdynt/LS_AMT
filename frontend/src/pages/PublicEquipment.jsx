@@ -11,6 +11,7 @@ import {
   Paperclip,
   ShieldCheck,
   Wrench,
+  Gauge,
 } from "lucide-react";
 
 import { API, api } from "@/lib/api";
@@ -239,6 +240,12 @@ export default function PublicEquipment() {
     data?.maintenance || [];
   const documents =
     data?.documents || [];
+  const calibrations =
+    data?.calibrations || [];
+  const calibrationDocuments =
+    documents.filter(
+      (file) => file?.source === "calibration"
+    );
 
   const documentsByMaintenance = useMemo(
     () =>
@@ -389,6 +396,96 @@ export default function PublicEquipment() {
             </div>
           </div>
         </section>
+
+        {(calibrations.length > 0 || calibrationDocuments.length > 0) && (
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Gauge className="h-4 w-4 text-blue-600" />
+                  <h2 className="font-heading text-base font-bold text-slate-900">
+                    Calibration
+                  </h2>
+                </div>
+                <div className="mt-1 text-xs text-slate-400">
+                  Assigned calibration tools and certificates
+                </div>
+              </div>
+
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 font-mono text-xs font-semibold text-slate-600">
+                {calibrations.length}
+              </span>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {calibrations.map((tool) => (
+                <div key={tool.id} className="p-5 sm:p-6">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <InfoItem
+                      label="Tool ID / Serial"
+                      value={tool.tool_id}
+                      mono
+                    />
+                    <InfoItem
+                      label="Category"
+                      value={tool.category}
+                    />
+                    <InfoItem
+                      label="Calibration Date"
+                      value={fmtDate(tool.calibration_date)}
+                      mono
+                    />
+                    <InfoItem
+                      label="Expired Date"
+                      value={fmtDate(tool.expired_date)}
+                      mono
+                    />
+                    <InfoItem
+                      label="Certificate No."
+                      value={tool.cert_number}
+                      mono
+                    />
+                    <InfoItem
+                      label="Calibrated By"
+                      value={tool.calibrated_by}
+                    />
+                    <InfoItem
+                      label="Frequency"
+                      value={
+                        tool.frequency_value
+                          ? `${tool.frequency_value} ${
+                              tool.frequency_unit === "month"
+                                ? "month(s)"
+                                : "week(s)"
+                            }`
+                          : "—"
+                      }
+                    />
+                    <InfoItem
+                      label="Tool"
+                      value={tool.tool_name}
+                    />
+                  </div>
+                </div>
+              ))}
+
+              {calibrations.length === 0 && (
+                <div className="p-5 text-sm text-slate-400 sm:p-6">
+                  No currently assigned calibration tools.
+                </div>
+              )}
+            </div>
+
+            {calibrationDocuments.length > 0 && (
+              <div className="border-t border-slate-100 px-5 pb-5 sm:px-6 sm:pb-6">
+                <PublicDocuments
+                  files={calibrationDocuments}
+                  token={token}
+                />
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">

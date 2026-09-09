@@ -19,7 +19,6 @@ const DOCUMENT_TYPES = [
   "Lifting Inspection",
   "Inspection Report",
   "Failure Evidence",
-  "Calibration Certificate",
   "Test Certificate",
   "Certificate",
   "Other Document",
@@ -111,8 +110,9 @@ export default function MaintenanceDocuments({
             </span>
           </div>
           <div className="mt-1 text-xs text-slate-400">
-            Photos, function tests, inspections, certificates, and other
-            records for this maintenance.
+            Photos, function tests, inspections, and other records
+            for this maintenance. Calibration certificates are uploaded
+            only from the Calibration menu.
           </div>
         </div>
 
