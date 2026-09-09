@@ -83,8 +83,8 @@ echo "Building AMT $VERSION from commit $SHORT_COMMIT..."
 # node_modules and build output are not part of git archive.
 git_user archive --format=tar HEAD | tar -xf - -C "$SOURCE"
 
-# Release package gets its actual target VERSION without changing production.
-printf '%s\n' "$VERSION" > "$SOURCE/VERSION"
+# Runtime version is stored in /var/lib/amt-updater/current-version.
+# Keep the tracked VERSION file unchanged so self-updates do not dirty Git.
 
 # Never ship local secrets/runtime directories even if accidentally tracked later.
 rm -f "$SOURCE/backend/.env"

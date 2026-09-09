@@ -19,6 +19,9 @@ APP_ROOT = Path("/opt/amt")
 STATE_ROOT = Path("/var/lib/amt-updater")
 REQUEST_FILE = STATE_ROOT / "request.json"
 STATUS_FILE = STATE_ROOT / "status.json"
+CURRENT_VERSION_FILE = (
+    STATE_ROOT / "current-version"
+)
 LOCK_FILE = STATE_ROOT / "update.lock"
 DOWNLOAD_ROOT = STATE_ROOT / "downloads"
 BACKUP_ROOT = Path("/opt/amt-update-backups")
@@ -30,6 +33,7 @@ EXCLUDED_PREFIXES = (
     ".git/",
     "backend/.env",
     "backend/venv/",
+    "frontend/.env",
     "frontend/node_modules/",
     "frontend/build/",
     "storage/",
@@ -97,12 +101,39 @@ def semver_tuple(value):
 
 
 def read_current_version():
-    path = APP_ROOT / "VERSION"
-    try:
-        value = path.read_text(encoding="utf-8").strip()
-    except OSError:
-        value = "0.0.0"
-    return value or "0.0.0"
+    for path in (
+        CURRENT_VERSION_FILE,
+        APP_ROOT / "VERSION",
+    ):
+        try:
+            value = path.read_text(
+                encoding="utf-8"
+            ).strip()
+        except OSError:
+            continue
+
+        if value:
+            return value
+
+    return "0.0.0"
+
+
+def write_current_version(value):
+    STATE_ROOT.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    tmp = CURRENT_VERSION_FILE.with_suffix(
+        ".tmp"
+    )
+    tmp.write_text(
+        str(value).strip() + "\n",
+        encoding="utf-8",
+    )
+    os.chmod(tmp, 0o644)
+    tmp.replace(
+        CURRENT_VERSION_FILE
+    )
 
 
 def validate_request(data):
@@ -270,6 +301,7 @@ def code_backup(backup_dir):
         "--exclude=.git",
         "--exclude=backend/.env",
         "--exclude=backend/venv",
+        "--exclude=frontend/.env",
         "--exclude=frontend/node_modules",
         "--exclude=frontend/build",
         "--exclude=storage",
@@ -290,10 +322,16 @@ def code_backup(backup_dir):
 
 
 def sync_code(source):
+    # Temporary extraction roots default to 0700. rsync -a
+    # mirrors source-root metadata to /opt/amt, so normalize
+    # the source root before syncing.
+    source.chmod(0o755)
+
     excludes = [
         "--exclude=.git",
         "--exclude=backend/.env",
         "--exclude=backend/venv",
+        "--exclude=frontend/.env",
         "--exclude=frontend/node_modules",
         "--exclude=frontend/build",
         "--exclude=storage",
@@ -306,10 +344,21 @@ def sync_code(source):
         "/usr/bin/rsync",
         "-a",
         "--delete",
+        "--chown=ubuntu:ubuntu",
         *excludes,
         str(source) + "/",
         str(APP_ROOT) + "/",
     ])
+
+    run([
+        "/bin/chown",
+        "ubuntu:ubuntu",
+        str(APP_ROOT),
+    ])
+    os.chmod(
+        APP_ROOT,
+        0o755,
+    )
 
 
 def build_frontend():
@@ -345,7 +394,9 @@ def rollback(code_dir, old_version):
         version=old_version,
     )
     sync_code(code_dir)
-    (APP_ROOT / "VERSION").write_text(old_version + "\n", encoding="utf-8")
+    write_current_version(
+        old_version
+    )
     build_frontend()
     restart_backend()
     health_check()
@@ -431,9 +482,8 @@ def main():
                     )
                     build_frontend()
 
-                    (APP_ROOT / "VERSION").write_text(
-                        target_version + "\n",
-                        encoding="utf-8",
+                    write_current_version(
+                        target_version
                     )
 
                     write_status(

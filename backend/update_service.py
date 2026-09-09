@@ -18,6 +18,9 @@ from license_service import (
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = APP_ROOT / "VERSION"
+RUNTIME_VERSION_FILE = Path(
+    "/var/lib/amt-updater/current-version"
+)
 UPDATE_CHANNEL = os.environ.get(
     "AMT_RELEASE_CHANNEL",
     "stable",
@@ -27,13 +30,21 @@ VALID_CHANNELS = {"dev", "beta", "stable"}
 
 
 def current_version() -> str:
-    try:
-        value = VERSION_FILE.read_text(
-            encoding="utf-8"
-        ).strip()
-    except OSError:
-        value = "0.0.0"
-    return value or "0.0.0"
+    for path in (
+        RUNTIME_VERSION_FILE,
+        VERSION_FILE,
+    ):
+        try:
+            value = path.read_text(
+                encoding="utf-8"
+            ).strip()
+        except OSError:
+            continue
+
+        if value:
+            return value
+
+    return "0.0.0"
 
 
 def _post_update_check_sync(payload: dict) -> dict:
