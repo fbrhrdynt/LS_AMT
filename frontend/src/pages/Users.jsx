@@ -1,8 +1,12 @@
 import {
+  CheckCircle2,
+  Eye,
+  EyeOff,
   KeyRound,
   Plus,
   Trash2,
   Users as UsersIcon,
+  XCircle,
 } from "lucide-react";
 import {
   useEffect,
@@ -77,6 +81,7 @@ const empty = {
   email: "",
   name: "",
   password: "",
+  confirm_password: "",
   role: "technician",
   menu_access: [...ALL_MENU_KEYS],
 };
@@ -203,6 +208,8 @@ export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [dialog, setDialog] = useState(false);
   const [form, setForm] = useState(empty);
+  const [showPassword, setShowPassword] =
+    useState(false);
   const [accessTarget, setAccessTarget] = useState(null);
   const [accessValue, setAccessValue] = useState([]);
 
@@ -256,6 +263,7 @@ export default function UsersPage() {
         ...delegableMenuKeys,
       ],
     });
+    setShowPassword(false);
     setDialog(true);
   };
 
@@ -265,13 +273,38 @@ export default function UsersPage() {
       return;
     }
 
+    if (form.password.length < 12) {
+      toast.error(
+        "Password must contain at least 12 characters"
+      );
+      return;
+    }
+
+    if (
+      form.password !==
+      form.confirm_password
+    ) {
+      toast.error(
+        "Password confirmation does not match"
+      );
+      return;
+    }
+
     if (!createRoles.includes(form.role)) {
       toast.error("You cannot create this role");
       return;
     }
 
     try {
-      await api.post("/users", form);
+      const {
+        confirm_password,
+        ...payload
+      } = form;
+
+      await api.post(
+        "/users",
+        payload
+      );
       toast.success("User created");
       setDialog(false);
       setForm({
@@ -539,15 +572,124 @@ export default function UsersPage() {
             }
           />
 
-          <TextInput
-            label="Password"
-            type="password"
-            required
-            value={form.password}
-            onChange={(event) =>
-              setForm({ ...form, password: event.target.value })
-            }
-          />
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Password{" "}
+              <span className="text-red-500">*</span>
+            </label>
+            <div className="relative mt-1">
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                autoComplete="new-password"
+                value={form.password}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    password: event.target.value,
+                  })
+                }
+                className="w-full rounded-md border border-slate-200 px-3 py-2 pr-11 text-sm outline-none transition-colors focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setShowPassword((current) => !current)
+                }
+                className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-slate-400 hover:text-slate-700"
+                aria-label={
+                  showPassword ? "Hide password" : "Show password"
+                }
+                title={
+                  showPassword ? "Hide password" : "Show password"
+                }
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+            <div className="mt-1 flex items-center gap-1 text-[11px]">
+              {form.password.length >= 12 ? (
+                <>
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  <span className="text-emerald-600">
+                    Minimum 12 characters
+                  </span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-3.5 w-3.5 text-slate-400" />
+                  <span className="text-slate-400">
+                    Minimum 12 characters
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Re-type Password{" "}
+              <span className="text-red-500">*</span>
+            </label>
+            <div className="relative mt-1">
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                autoComplete="new-password"
+                value={form.confirm_password}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    confirm_password: event.target.value,
+                  })
+                }
+                className="w-full rounded-md border border-slate-200 px-3 py-2 pr-11 text-sm outline-none transition-colors focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setShowPassword((current) => !current)
+                }
+                className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-slate-400 hover:text-slate-700"
+                aria-label={
+                  showPassword ? "Hide password" : "Show password"
+                }
+                title={
+                  showPassword ? "Hide password" : "Show password"
+                }
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+
+            {form.confirm_password && (
+              <div className="mt-1 flex items-center gap-1 text-[11px]">
+                {form.password === form.confirm_password ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                    <span className="text-emerald-600">
+                      Passwords match
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-3.5 w-3.5 text-red-500" />
+                    <span className="text-red-500">
+                      Passwords do not match
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
           <SelectInput
             label="Role"
@@ -588,7 +730,16 @@ export default function UsersPage() {
             <Btn variant="outline" onClick={() => setDialog(false)}>
               Cancel
             </Btn>
-            <Btn onClick={create}>Create</Btn>
+            <Btn
+              onClick={create}
+              disabled={
+                form.password.length < 12 ||
+                !form.confirm_password ||
+                form.password !== form.confirm_password
+              }
+            >
+              Create
+            </Btn>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,16 +1,33 @@
+import hashlib
 import io
 import json
 import os
+import socket
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from core import db, now_iso, audit_log
 from auth import require_roles
 
 router = APIRouter(prefix="/api/admin")
-ADMIN = require_roles("admin")
+MASTER_ADMIN = require_roles("master_admin")
+
+LICENSE_API_BASE = os.environ.get(
+    "LOGI_LICENSE_API_BASE",
+    "https://crm.logisourcedigital.web.id",
+).strip().rstrip("/")
+LICENSE_KEY = os.environ.get(
+    "LOGI_LICENSE_KEY",
+    "",
+).strip()
+LICENSE_PRODUCT_SLUG = os.environ.get(
+    "LOGI_LICENSE_PRODUCT_SLUG",
+    "ls-amt-baroid-uae",
+).strip()
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 EXCLUDE_DIRS = {
@@ -30,6 +47,9 @@ ENV_EXAMPLES = {
         "ADMIN_PASSWORD=\"replace-with-a-strong-password\"\n"
         "FRONTEND_URL=\"https://amt.example.com\"\n"
         "STORAGE_ROOT=\"/opt/amt/storage\"\n"
+        "LOGI_LICENSE_API_BASE=\"https://crm.logisourcedigital.web.id\"\n"
+        "LOGI_LICENSE_KEY=\"replace-with-ls-crm-license-key\"\n"
+        "LOGI_LICENSE_PRODUCT_SLUG=\"ls-amt-baroid-uae\"\n"
     ),
     "frontend/.env.example": "REACT_APP_BACKEND_URL=https://amt.example.com\n",
 }
@@ -41,8 +61,324 @@ NO_STORE_HEADERS = {
 }
 
 
+def _license_fingerprint() -> str:
+    raw = ""
+    machine_id = Path("/etc/machine-id")
+
+    try:
+        if machine_id.exists():
+            raw = machine_id.read_text(
+                encoding="utf-8"
+            ).strip()
+    except Exception:
+        raw = ""
+
+    if not raw:
+        raw = socket.gethostname()
+
+    digest = hashlib.sha256(
+        raw.encode("utf-8")
+    ).hexdigest()
+
+    return f"amt-{digest[:32]}"
+
+
+def _mask_license_key(value: str) -> str:
+    value = str(value or "")
+    if len(value) <= 10:
+        return "••••••••"
+    return (
+        value[:5]
+        + "••••••"
+        + value[-4:]
+    )
+
+
+def _sanitize_license_payload(value):
+    if isinstance(value, dict):
+        result = {}
+        for key, item in value.items():
+            lowered = str(key).lower()
+            if (
+                "secret" in lowered
+                or "token" in lowered
+                or lowered in {
+                    "license_key",
+                    "key",
+                }
+            ):
+                result[key] = "••••••••"
+            else:
+                result[key] = (
+                    _sanitize_license_payload(
+                        item
+                    )
+                )
+        return result
+
+    if isinstance(value, list):
+        return [
+            _sanitize_license_payload(item)
+            for item in value
+        ]
+
+    return value
+
+
+def _post_license_api(path: str, payload: dict):
+    if not LICENSE_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "LS CRM license key is not configured "
+                "on this AMT server"
+            ),
+        )
+
+    url = LICENSE_API_BASE + path
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(
+            payload
+        ).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "LogiSource-AMT-License/1.0",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=5,
+        ) as response:
+            body = response.read().decode(
+                "utf-8"
+            )
+            data = (
+                json.loads(body)
+                if body
+                else {}
+            )
+            return {
+                "http_status": response.status,
+                "data": data,
+            }
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(
+            "utf-8",
+            errors="replace",
+        )
+        try:
+            data = json.loads(body)
+        except Exception:
+            data = {
+                "message": (
+                    body[:500]
+                    or "LS CRM rejected the request"
+                )
+            }
+
+        return {
+            "http_status": exc.code,
+            "data": data,
+        }
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        OSError,
+    ) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Could not reach LS CRM license service: "
+                f"{exc}"
+            ),
+        )
+
+
+def _license_summary(remote: dict) -> dict:
+    data = remote.get("data") or {}
+
+    nested = (
+        data.get("license")
+        if isinstance(
+            data.get("license"),
+            dict,
+        )
+        else {}
+    )
+
+    def pick(*keys):
+        for key in keys:
+            if key in data:
+                return data.get(key)
+            if key in nested:
+                return nested.get(key)
+        return None
+
+    features = (
+        pick(
+            "features",
+            "feature_flags",
+        )
+        or []
+    )
+    if isinstance(
+        features,
+        str,
+    ):
+        features = [
+            item.strip()
+            for item in features.split(",")
+            if item.strip()
+        ]
+
+    status = (
+        pick("status")
+        or (
+            "Active"
+            if pick("valid")
+            else "Invalid"
+        )
+    )
+
+    return {
+        "configured": bool(LICENSE_KEY),
+        "license_key": _mask_license_key(
+            LICENSE_KEY
+        ),
+        "product_slug": LICENSE_PRODUCT_SLUG,
+        "crm_url": LICENSE_API_BASE,
+        "fingerprint": _license_fingerprint(),
+        "hostname": socket.gethostname(),
+        "valid": bool(
+            pick("valid")
+        ),
+        "status": status,
+        "plan": pick("plan"),
+        "features": features,
+        "expiry": pick(
+            "expiry",
+            "expires_at",
+            "expiration",
+        ),
+        "issued": pick(
+            "issued",
+            "issued_at",
+        ),
+        "activations": pick(
+            "activations",
+            "activation_count",
+        ),
+        "activation_limit": pick(
+            "activation_limit",
+            "max_activations",
+        ),
+        "total_checks": pick(
+            "total_checks",
+            "checks",
+        ),
+        "message": pick(
+            "message",
+            "detail",
+        ),
+        "remote_http_status": (
+            remote.get(
+                "http_status"
+            )
+        ),
+        "raw": _sanitize_license_payload(
+            data
+        ),
+    }
+
+
+def _license_request_payload(
+    include_hostname: bool = False,
+):
+    payload = {
+        "license_key": LICENSE_KEY,
+        "fingerprint": _license_fingerprint(),
+        "product_slug": LICENSE_PRODUCT_SLUG,
+    }
+
+    if include_hostname:
+        payload["hostname"] = (
+            socket.gethostname()
+        )
+
+    return payload
+
+
+@router.get("/license")
+async def license_status(
+    user: dict = Depends(
+        MASTER_ADMIN
+    ),
+):
+    if not LICENSE_KEY:
+        return {
+            "configured": False,
+            "license_key": "",
+            "product_slug": (
+                LICENSE_PRODUCT_SLUG
+            ),
+            "crm_url": LICENSE_API_BASE,
+            "status": "Not configured",
+            "valid": False,
+            "features": [],
+        }
+
+    remote = _post_license_api(
+        "/api/public/license/verify",
+        _license_request_payload(),
+    )
+
+    return _license_summary(
+        remote
+    )
+
+
+@router.post("/license/activate")
+async def activate_license(
+    user: dict = Depends(
+        MASTER_ADMIN
+    ),
+):
+    remote = _post_license_api(
+        "/api/public/license/activate",
+        _license_request_payload(
+            include_hostname=True
+        ),
+    )
+
+    summary = _license_summary(
+        remote
+    )
+
+    await audit_log(
+        "license",
+        LICENSE_PRODUCT_SLUG,
+        "license.activate",
+        user,
+        (
+            "Requested LS CRM license activation "
+            f"(HTTP {summary.get('remote_http_status')})"
+        ),
+    )
+
+    return summary
+
+
 @router.get("/download/source")
-async def download_source(user: dict = Depends(ADMIN)):
+async def download_source(
+    user: dict = Depends(
+        MASTER_ADMIN
+    ),
+):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for base in ["backend", "frontend"]:
@@ -81,7 +417,11 @@ async def download_source(user: dict = Depends(ADMIN)):
 
 
 @router.get("/download/database")
-async def download_database(user: dict = Depends(ADMIN)):
+async def download_database(
+    user: dict = Depends(
+        MASTER_ADMIN
+    ),
+):
     buf = io.BytesIO()
     names = await db.list_collection_names()
     manifest = {
