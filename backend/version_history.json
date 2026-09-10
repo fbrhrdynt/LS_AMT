@@ -7,6 +7,27 @@
   },
   "versions": [
     {
+      "version": "1.1.8",
+      "status": "stable",
+      "title": "Version Log & Custom User Roles",
+      "summary": "Added a dedicated Version History page and reusable custom user-role profiles managed by Master Admin while preserving AMT's built-in authorization hierarchy.",
+      "changes": [
+        "Version & Updates remains accessible to Master Admin and Admin.",
+        "Version History now opens on a dedicated /version-history page instead of expanding inside Settings.",
+        "/version-log redirects to /version-history for a concise release-log URL.",
+        "Version History remains restricted to Master Admin and Admin.",
+        "Added Master Admin-only Custom Roles management at /roles.",
+        "Master Admin can create reusable role profiles such as Service Planner and Storekeeper.",
+        "Each custom role uses a safe built-in base permission level: Admin, Supervisor, Technician, or Viewer.",
+        "Custom role profiles define reusable menu access for assigned users.",
+        "Users can be created with a custom role profile or reassigned to one later.",
+        "Editing a custom role synchronizes its base permission and menu access to assigned users.",
+        "Deleting a custom role is blocked while users are still assigned to it.",
+        "Custom Master Admin role profiles are intentionally prohibited so protected Master Admin authority remains built-in.",
+        "Existing Admin and Supervisor user-management hierarchy and delegated menu-access limits remain enforced."
+      ]
+    },
+    {
       "version": "1.1.7",
       "status": "stable",
       "title": "Reporting, Version History & Public Guide",

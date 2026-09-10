@@ -209,11 +209,46 @@ AMT uses JWT-based authentication with the following application roles:
 
 Public QR pages are intentionally separate from authenticated AMT pages.
 
+### Custom Role Profiles
+
+Master Admin can create reusable organization-specific role profiles without replacing AMT's built-in security hierarchy.
+
+Examples:
+
+- `Service Planner` using the `supervisor` permission base
+- `Storekeeper` using the `technician` permission base
+
+Each custom role profile defines:
+
+- Display role name
+- Built-in permission base
+- Menu access
+
+The built-in base role continues to control backend authorization, while the custom role provides an organization-specific job title and reusable menu configuration.
+
+Custom `master_admin` profiles are intentionally not supported.
+
 ---
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.7**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.8**.
+
+### 1.1.8 - Version Log & Custom User Roles
+
+- **Version & Updates** remains available to **Master Admin** and **Admin**.
+- Version History now opens on a dedicated **`/version-history`** page instead of expanding inside Settings.
+- **`/version-log`** redirects to the same Version History page.
+- Version History remains restricted to Master Admin and Admin.
+- Added Master Admin-only **Custom Roles** management at **`/roles`**.
+- Master Admin can create reusable role profiles such as **Service Planner** and **Storekeeper**.
+- Each custom role uses a safe built-in base permission level: **Admin, Supervisor, Technician, or Viewer**.
+- Custom role profiles define reusable menu access for assigned users.
+- Users can be created with a custom role profile or reassigned to one later.
+- Editing a custom role automatically synchronizes its base permission and menu access to assigned users.
+- A custom role cannot be deleted while users are still assigned to it.
+- Custom Master Admin role profiles are intentionally prohibited so protected Master Admin authority remains built in.
+- Existing Admin/Supervisor hierarchy and delegated menu-access limits remain enforced.
 
 ### 1.1.7 - Reporting, Version History & Public Guide
 
