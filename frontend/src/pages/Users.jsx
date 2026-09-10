@@ -4,6 +4,7 @@ import {
   EyeOff,
   KeyRound,
   Plus,
+  ShieldPlus,
   Trash2,
   Users as UsersIcon,
   XCircle,
@@ -13,6 +14,9 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  useNavigate,
+} from "react-router-dom";
 import { toast } from "sonner";
 
 import {
@@ -83,6 +87,7 @@ const empty = {
   password: "",
   confirm_password: "",
   role: "technician",
+  role_profile_id: "",
   menu_access: [...ALL_MENU_KEYS],
 };
 
@@ -113,6 +118,9 @@ function MenuCheckboxes({
   onChange,
   allowedKeys = ALL_MENU_KEYS,
   disabled = false,
+  disabledMessage = (
+    "Master Admin always has access to all menus."
+  ),
 }) {
   const allowed = new Set(
     allowedKeys
@@ -196,7 +204,7 @@ function MenuCheckboxes({
 
       {disabled && (
         <div className="mt-1 text-[11px] text-slate-400">
-          Master Admin always has access to all menus.
+          {disabledMessage}
         </div>
       )}
     </div>
@@ -205,7 +213,14 @@ function MenuCheckboxes({
 
 export default function UsersPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+
   const [users, setUsers] = useState([]);
+
+  const [
+    roleProfiles,
+    setRoleProfiles,
+  ] = useState([]);
   const [dialog, setDialog] = useState(false);
   const [form, setForm] = useState(empty);
   const [showPassword, setShowPassword] =
@@ -239,10 +254,47 @@ export default function UsersPage() {
     );
   }, [user]);
 
+  const compatibleProfiles =
+    useMemo(
+      () =>
+        roleProfiles.filter(
+          (profile) =>
+            createRoles.includes(
+              profile.base_role
+            ) &&
+            (
+              profile.menu_access ||
+              []
+            ).every(
+              (key) =>
+                delegableMenuKeys.includes(
+                  key
+                )
+            )
+        ),
+      [
+        roleProfiles,
+        createRoles,
+        delegableMenuKeys,
+      ]
+    );
+
   const load = async () => {
     try {
-      const { data } = await api.get("/users");
-      setUsers(data);
+      const [
+        usersResponse,
+        rolesResponse,
+      ] = await Promise.all([
+        api.get("/users"),
+        api.get("/role-profiles"),
+      ]);
+
+      setUsers(
+        usersResponse.data || []
+      );
+      setRoleProfiles(
+        rolesResponse.data || []
+      );
     } catch (error) {
       toast.error(
         formatApiError(error.response?.data?.detail) ||
@@ -259,6 +311,7 @@ export default function UsersPage() {
     setForm({
       ...empty,
       role: defaultRole,
+      role_profile_id: "",
       menu_access: [
         ...delegableMenuKeys,
       ],
@@ -290,8 +343,34 @@ export default function UsersPage() {
       return;
     }
 
-    if (!createRoles.includes(form.role)) {
-      toast.error("You cannot create this role");
+    const selectedProfile =
+      form.role_profile_id
+        ? compatibleProfiles.find(
+            (profile) =>
+              profile.id ===
+              form.role_profile_id
+          )
+        : null;
+
+    if (
+      form.role_profile_id &&
+      !selectedProfile
+    ) {
+      toast.error(
+        "You cannot create this custom role"
+      );
+      return;
+    }
+
+    if (
+      !form.role_profile_id &&
+      !createRoles.includes(
+        form.role
+      )
+    ) {
+      toast.error(
+        "You cannot create this role"
+      );
       return;
     }
 
@@ -310,6 +389,7 @@ export default function UsersPage() {
       setForm({
         ...empty,
         role: defaultRole,
+        role_profile_id: "",
         menu_access: [
           ...delegableMenuKeys,
         ],
@@ -335,6 +415,53 @@ export default function UsersPage() {
       );
     }
   };
+
+  const changeRoleProfile =
+    async (
+      target,
+      profileId
+    ) => {
+      if (
+        !canManageTarget(
+          user,
+          target
+        )
+      ) {
+        return;
+      }
+
+      try {
+        if (profileId) {
+          await api.patch(
+            `/users/${target.id}/role-profile`,
+            {
+              role_profile_id:
+                profileId,
+            }
+          );
+        } else {
+          await api.patch(
+            `/users/${target.id}/role`,
+            {
+              role:
+                target.role,
+            }
+          );
+        }
+
+        toast.success(
+          "Role updated"
+        );
+        load();
+      } catch (error) {
+        toast.error(
+          formatApiError(
+            error.response?.data
+              ?.detail
+          )
+        );
+      }
+    };
 
   const openAccess = (target) => {
     if (!canManageTarget(user, target)) return;
@@ -396,7 +523,14 @@ export default function UsersPage() {
     }
   };
 
-  const masterSelected = form.role === "master_admin";
+  const masterSelected =
+    form.role === "master_admin" &&
+    !form.role_profile_id;
+
+  const profileSelected =
+    Boolean(
+      form.role_profile_id
+    );
 
   return (
     <div>
@@ -404,6 +538,18 @@ export default function UsersPage() {
         title="Users"
         subtitle="Role hierarchy and menu access"
       >
+        {isMasterAdmin(user) && (
+          <Btn
+            variant="outline"
+            onClick={() =>
+              navigate("/roles")
+            }
+          >
+            <ShieldPlus className="h-4 w-4" />
+            Manage Roles
+          </Btn>
+        )}
+
         <Btn onClick={openCreate} data-testid="add-user-btn">
           <Plus className="h-4 w-4" />
           Add User
@@ -415,10 +561,11 @@ export default function UsersPage() {
           User hierarchy
         </div>
         <div className="mt-1 text-xs leading-5 text-slate-500">
-          Master Admin can manage all roles. Admin can manage Admin,
-          Supervisor, Technician and Viewer. Supervisor can manage
-          Technician and Viewer. A manager can only grant menus already
-          available in their own account.
+          Master Admin can manage all built-in roles and create custom
+          role templates. Admin can manage Admin, Supervisor, Technician
+          and Viewer. Supervisor can manage Technician and Viewer. Custom
+          roles keep a built-in permission level underneath, so existing
+          AMT security rules remain enforced.
         </div>
       </div>
 
@@ -471,30 +618,78 @@ export default function UsersPage() {
                     </td>
 
                     <td className="px-4 py-3">
-                      <select
-                        value={target.role}
-                        onChange={(event) =>
-                          changeRole(target, event.target.value)
-                        }
-                        disabled={
-                          !manageable ||
-                          target.id === user.id ||
-                          protectedOwner
-                        }
-                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {!targetRoleOptions.includes(target.role) && (
-                          <option value={target.role}>
-                            {target.role}
-                          </option>
+                      <div className="flex min-w-[180px] flex-col gap-1.5">
+                        {target.role_profile_name && (
+                          <div className="text-xs font-semibold text-blue-700">
+                            {target.role_profile_name}
+                          </div>
                         )}
 
-                        {targetRoleOptions.map((role) => (
-                          <option key={role} value={role}>
-                            {role}
-                          </option>
-                        ))}
-                      </select>
+                        <select
+                          value={target.role}
+                          onChange={(event) =>
+                            changeRole(
+                              target,
+                              event.target.value
+                            )
+                          }
+                          disabled={
+                            !manageable ||
+                            target.id === user.id ||
+                            protectedOwner
+                          }
+                          className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {!targetRoleOptions.includes(target.role) && (
+                            <option value={target.role}>
+                              {target.role}
+                            </option>
+                          )}
+
+                          {targetRoleOptions.map((role) => (
+                            <option key={role} value={role}>
+                              {role}
+                            </option>
+                          ))}
+                        </select>
+
+                        {!protectedOwner &&
+                          target.role !==
+                            "master_admin" && (
+                          <select
+                            value={
+                              target.role_profile_id ||
+                              ""
+                            }
+                            onChange={(event) =>
+                              changeRoleProfile(
+                                target,
+                                event.target.value
+                              )
+                            }
+                            disabled={
+                              !manageable ||
+                              target.id === user.id
+                            }
+                            className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <option value="">
+                              No custom role
+                            </option>
+
+                            {compatibleProfiles.map(
+                              (profile) => (
+                                <option
+                                  key={profile.id}
+                                  value={profile.id}
+                                >
+                                  {profile.name}
+                                </option>
+                              )
+                            )}
+                          </select>
+                        )}
+                      </div>
                     </td>
 
                     <td className="px-4 py-3">
@@ -503,7 +698,10 @@ export default function UsersPage() {
                         disabled={
                           !manageable ||
                           target.id === user.id ||
-                          target.role === "master_admin"
+                          target.role === "master_admin" ||
+                          Boolean(
+                            target.role_profile_id
+                          )
                         }
                         onClick={() => openAccess(target)}
                         className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -511,7 +709,9 @@ export default function UsersPage() {
                         <KeyRound className="h-3.5 w-3.5" />
                         {target.role === "master_admin"
                           ? "All menus"
-                          : `${access.length} menu(s)`}
+                          : target.role_profile_id
+                            ? `${access.length} menu(s) · role managed`
+                            : `${access.length} menu(s)`}
                       </button>
                     </td>
 
@@ -691,14 +891,76 @@ export default function UsersPage() {
             )}
           </div>
 
+
+          <SelectInput
+            label="Custom Role Profile (optional)"
+            value={
+              form.role_profile_id
+            }
+            onChange={(event) => {
+              const profileId =
+                event.target.value;
+
+              const profile =
+                compatibleProfiles.find(
+                  (item) =>
+                    item.id ===
+                    profileId
+                );
+
+              if (!profile) {
+                setForm({
+                  ...form,
+                  role_profile_id:
+                    "",
+                });
+                return;
+              }
+
+              setForm({
+                ...form,
+                role_profile_id:
+                  profile.id,
+                role:
+                  profile.base_role,
+                menu_access: [
+                  ...(
+                    profile.menu_access ||
+                    []
+                  ),
+                ],
+              });
+            }}
+          >
+            <option value="">
+              Use built-in role
+            </option>
+
+            {compatibleProfiles.map(
+              (profile) => (
+                <option
+                  key={profile.id}
+                  value={profile.id}
+                >
+                  {profile.name} — {profile.base_role}
+                </option>
+              )
+            )}
+          </SelectInput>
+
           <SelectInput
             label="Role"
             value={form.role}
+            disabled={
+              profileSelected
+            }
             onChange={(event) => {
               const role = event.target.value;
               setForm({
                 ...form,
                 role,
+                role_profile_id:
+                  "",
                 menu_access:
                   role === "master_admin"
                     ? [...ALL_MENU_KEYS]
@@ -720,7 +982,15 @@ export default function UsersPage() {
                 ? ALL_MENU_KEYS
                 : delegableMenuKeys
             }
-            disabled={masterSelected}
+            disabled={
+              masterSelected ||
+              profileSelected
+            }
+            disabledMessage={
+              profileSelected
+                ? "Menu access is managed by the selected custom role profile."
+                : "Master Admin always has access to all menus."
+            }
             onChange={(menu_access) =>
               setForm({ ...form, menu_access })
             }

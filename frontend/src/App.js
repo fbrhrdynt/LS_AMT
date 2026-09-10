@@ -10,6 +10,7 @@ import {
   hasLicenseFeature,
   hasMenuAccess,
   isAdmin,
+  isMasterAdmin,
 } from "@/context/AuthContext";
 import { CurrencyProvider } from "@/context/CurrencyContext";
 import AppLayout from "@/components/AppLayout";
@@ -28,6 +29,8 @@ import Reports from "@/pages/Reports";
 import Audit from "@/pages/Audit";
 import UsersPage from "@/pages/Users";
 import SettingsPage from "@/pages/Settings";
+import VersionHistory from "@/pages/VersionHistory";
+import RoleProfiles from "@/pages/RoleProfiles";
 import PublicEquipment from "@/pages/PublicEquipment";
 
 function FullLoader() {
@@ -118,6 +121,9 @@ function AppRoutes() {
       <Route path="/audit" element={<Protected menu="aud" feature="audit_log"><Audit /></Protected>} />
       <Route path="/users" element={<RoleRoute allow={canManageUsers} menu="usr"><UsersPage /></RoleRoute>} />
       <Route path="/settings" element={<RoleRoute allow={isAdmin} menu="set"><SettingsPage /></RoleRoute>} />
+      <Route path="/version-history" element={<RoleRoute allow={isAdmin} menu="set"><VersionHistory /></RoleRoute>} />
+      <Route path="/version-log" element={<Navigate to="/version-history" replace />} />
+      <Route path="/roles" element={<RoleRoute allow={isMasterAdmin} menu="usr"><RoleProfiles /></RoleRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

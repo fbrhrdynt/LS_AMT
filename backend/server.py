@@ -22,6 +22,7 @@ from export_routes import router as export_router
 from license_routes import router as license_router
 from update_routes import router as update_router
 from product_routes import router as product_router
+from role_profiles import router as role_profiles_router
 from public_access import backfill_equipment_public_tokens
 from importer import seed_from_excel
 from storage import init_storage
@@ -132,6 +133,7 @@ app.include_router(export_router)
 app.include_router(license_router)
 app.include_router(update_router)
 app.include_router(product_router)
+app.include_router(role_profiles_router)
 
 
 async def _ensure_indexes():
@@ -141,6 +143,17 @@ async def _ensure_indexes():
     await db.users.create_index(
         "id", unique=True, name="uniq_users_id",
         partialFilterExpression=partial_string("id"),
+    )
+
+    await db.role_profiles.create_index(
+        "id",
+        unique=True,
+        name="uniq_role_profiles_id",
+    )
+    await db.role_profiles.create_index(
+        "name_key",
+        unique=True,
+        name="uniq_role_profiles_name",
     )
 
     await db.auth_sessions.create_index("jti_hash", unique=True, name="uniq_auth_session_jti")

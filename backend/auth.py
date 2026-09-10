@@ -479,6 +479,185 @@ class MenuAccessBody(BaseModel):
     )
 
 
+class RoleProfileAssignmentBody(
+    BaseModel
+):
+    role_profile_id: str
+
+
+async def _load_role_profile(
+    profile_id: str,
+) -> dict:
+    profile = (
+        await db.role_profiles.find_one(
+            {
+                "id": profile_id
+            },
+            {"_id": 0},
+        )
+    )
+
+    if not profile:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Custom role not found"
+            ),
+        )
+
+    return profile
+
+
+def _validate_role_profile_for_actor(
+    actor: dict,
+    profile: dict,
+) -> tuple[str, list[str]]:
+    base_role = (
+        profile.get(
+            "base_role"
+        )
+        or "viewer"
+    )
+
+    if (
+        base_role
+        not in _allowed_create_roles(
+            actor
+        )
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "You cannot assign a "
+                "custom role with this "
+                "permission level"
+            ),
+        )
+
+    access = (
+        _validate_delegated_menu_access(
+            actor,
+            profile.get(
+                "menu_access"
+            )
+            or [],
+        )
+    )
+
+    return (
+        base_role,
+        access,
+    )
+
+
+@users_router.patch(
+    "/{user_id}/role-profile"
+)
+async def set_role_profile(
+    user_id: str,
+    body: RoleProfileAssignmentBody,
+    user: dict = Depends(
+        require_roles(
+            "admin",
+            "supervisor",
+        )
+    ),
+):
+    if user_id == user["id"]:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot change your own role"
+            ),
+        )
+
+    target = await db.users.find_one(
+        {"id": user_id}
+    )
+
+    if not target:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    if not _can_manage_target(
+        user,
+        target,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "You cannot manage a user "
+                "at this role level"
+            ),
+        )
+
+    if _is_febro_name(
+        target.get("name")
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "The protected Master Admin "
+                "account cannot use a custom role"
+            ),
+        )
+
+    profile = (
+        await _load_role_profile(
+            body.role_profile_id
+        )
+    )
+
+    (
+        base_role,
+        access,
+    ) = (
+        _validate_role_profile_for_actor(
+            user,
+            profile,
+        )
+    )
+
+    updated = (
+        await db.users.find_one_and_update(
+            {"id": user_id},
+            {
+                "$set": {
+                    "role": base_role,
+                    "role_profile_id": (
+                        profile["id"]
+                    ),
+                    "role_profile_name": (
+                        profile["name"]
+                    ),
+                    "menu_access": access,
+                }
+            },
+            return_document=(
+                ReturnDocument.AFTER
+            ),
+        )
+    )
+
+    await audit_log(
+        "user",
+        user_id,
+        "user.role_profile",
+        user,
+        (
+            "Custom role set to "
+            f"{profile['name']} "
+            f"({base_role})"
+        ),
+    )
+
+    return public_user(
+        updated
+    )
+
+
 @users_router.patch("/{user_id}/role")
 async def set_role(
     user_id: str,
@@ -548,7 +727,13 @@ async def set_role(
 
     await db.users.update_one(
         {"id": user_id},
-        {"$set": updates},
+        {
+            "$set": updates,
+            "$unset": {
+                "role_profile_id": "",
+                "role_profile_name": "",
+            },
+        },
     )
 
     await audit_log(
@@ -603,6 +788,19 @@ async def set_menu_access(
             ),
         )
 
+    if target.get(
+        "role_profile_id"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Menu access is managed by "
+                "the assigned custom role. "
+                "Change the custom role or edit "
+                "the role profile instead."
+            ),
+        )
+
     if _effective_role(target) == "master_admin":
         access = list(MENU_KEYS)
     else:
@@ -648,6 +846,7 @@ class NewUserBody(BaseModel):
         max_length=128,
     )
     role: str = "viewer"
+    role_profile_id: str | None = None
     menu_access: list[str] = Field(
         default_factory=lambda: list(
             MENU_KEYS
@@ -675,36 +874,72 @@ async def create_user(
             detail="Email already registered",
         )
 
-    requested_role = (
-        "master_admin"
-        if _is_febro_name(body.name)
-        else body.role
-    )
+    profile = None
 
-    if requested_role not in ROLES:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid role",
+    if body.role_profile_id:
+        if _is_febro_name(
+            body.name
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "The protected Master Admin "
+                    "account cannot use a custom role"
+                ),
+            )
+
+        profile = (
+            await _load_role_profile(
+                body.role_profile_id
+            )
         )
 
-    allowed = _allowed_create_roles(user)
-    if requested_role not in allowed:
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "You cannot create a user "
-                "with this role"
-            ),
+        (
+            requested_role,
+            menu_access,
+        ) = (
+            _validate_role_profile_for_actor(
+                user,
+                profile,
+            )
+        )
+    else:
+        requested_role = (
+            "master_admin"
+            if _is_febro_name(
+                body.name
+            )
+            else body.role
         )
 
-    menu_access = (
-        list(MENU_KEYS)
-        if requested_role == "master_admin"
-        else _validate_delegated_menu_access(
-            user,
-            body.menu_access,
+        if requested_role not in ROLES:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid role",
+            )
+
+        allowed = _allowed_create_roles(
+            user
         )
-    )
+
+        if requested_role not in allowed:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "You cannot create a user "
+                    "with this role"
+                ),
+            )
+
+        menu_access = (
+            list(MENU_KEYS)
+            if requested_role
+            == "master_admin"
+            else _validate_delegated_menu_access(
+                user,
+                body.menu_access,
+            )
+        )
 
     uid = new_id()
 
@@ -721,6 +956,14 @@ async def create_user(
         "picture": None,
         "created_at": now_iso(),
     }
+
+    if profile:
+        doc["role_profile_id"] = (
+            profile["id"]
+        )
+        doc["role_profile_name"] = (
+            profile["name"]
+        )
 
     try:
         await db.users.insert_one(doc)
