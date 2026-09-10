@@ -177,8 +177,11 @@ Administrators / supervisors can **Reset Public Link** to invalidate an existing
 - Status filtering
 - Client and job filtering
 - Technician filtering
-- CSV export
-- Excel export
+- Selectable maintenance rows with checkbox-based export
+- Consolidated PDF export for selected maintenance records
+- Consolidated Excel export for selected maintenance records
+- Full filtered PDF and Excel export
+- Branded professional Excel layout with title, logo, filters, freeze panes, print setup, and AMT credit
 - PDF maintenance reports
 
 ### Audit Trail
@@ -210,7 +213,21 @@ Public QR pages are intentionally separate from authenticated AMT pages.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.5**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.6**.
+
+### 1.1.6 - Reporting, Version History & Public Guide
+
+- Added **Version History & Public Product Guide** in Settings for **Master Admin** and **Admin**.
+- Version History is placed at the bottom of Settings and remains collapsed until **View Version History** is selected.
+- Added one always-current **AMT Public Product Overview PDF** generated on demand without accumulating persistent PDF files.
+- Public Equipment Passport now follows configured company branding and falls back to the official bundled AMT logo after reset.
+- Maintenance Reports now support checkbox selection for selective export.
+- Selected maintenance records can be exported into one consolidated PDF or one Excel workbook.
+- Existing full filtered maintenance PDF and Excel exports remain available.
+- Excel exports now include a title, generated timestamp, company or official AMT logo, styled headers, wrapped cells, filters, freeze panes, print layout, and AMT product credit.
+- PDF and Excel exports use the configured company logo when available and otherwise the official bundled AMT logo.
+- Removed synthetic text-only AMT logo fallback from report exports.
+- Release builder now verifies that the target version is documented before creating a signed release package.
 
 ### 1.1.5 - Admin Branding & Update Access
 
