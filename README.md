@@ -211,7 +211,7 @@ Public QR pages are intentionally separate from authenticated AMT pages.
 
 ### Custom Role Profiles
 
-Master Admin can create reusable organization-specific role profiles without replacing AMT's built-in security hierarchy.
+Master Admin and Admin can create reusable organization-specific role profiles without replacing AMT's built-in security hierarchy.
 
 Examples:
 
@@ -222,9 +222,9 @@ Each custom role profile defines:
 
 - Display role name
 - Built-in permission base
-- Menu access
+- Default menu access
 
-The built-in base role continues to control backend authorization, while the custom role provides an organization-specific job title and reusable menu configuration.
+The built-in base role continues to control backend authorization. The custom role provides an organization-specific job title and default menu selection, while Menu Access can still be adjusted per user account by the account creator within their own delegated access.
 
 Custom `master_admin` profiles are intentionally not supported.
 
@@ -232,7 +232,19 @@ Custom `master_admin` profiles are intentionally not supported.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.8**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.9**.
+
+### 1.1.9 - Admin Custom Roles & Per-User Menu Access
+
+- **Master Admin** and **Admin** can access and manage **Custom Roles**.
+- Custom-role base permission levels follow the authority of the account creating or editing the role.
+- Custom-role default menus cannot exceed the creator's own menu access.
+- Admin can create roles such as **Storekeeper** with **Technician** as the base permission.
+- When creating a user with a custom role, **Menu Access remains editable** using checkboxes.
+- The role profile supplies the base permission and default menu selection; each user keeps an individual menu configuration.
+- Menu Access can also be edited later for users assigned to custom roles.
+- Editing a custom role keeps users' individual Menu Access selections while synchronizing role name and base permission.
+- Custom Master Admin roles remain prohibited.
 
 ### 1.1.8 - Version Log & Custom User Roles
 

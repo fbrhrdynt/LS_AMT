@@ -26,8 +26,8 @@ router = APIRouter(
     prefix="/api/role-profiles"
 )
 
-MASTER_ADMIN = require_roles(
-    "master_admin"
+CUSTOM_ROLE_ADMIN = require_roles(
+    "admin"
 )
 USER_MANAGER = require_roles(
     "admin",
@@ -39,6 +39,21 @@ BASE_ROLES = {
     "supervisor",
     "technician",
     "viewer",
+}
+
+CREATABLE_BASE_ROLES = {
+    "master_admin": {
+        "admin",
+        "supervisor",
+        "technician",
+        "viewer",
+    },
+    "admin": {
+        "admin",
+        "supervisor",
+        "technician",
+        "viewer",
+    },
 }
 
 
@@ -91,20 +106,56 @@ def _normalize_menu(
     ]
 
 
+def _allowed_menu_access(
+    user: dict,
+) -> list[str]:
+    if (
+        user.get("role")
+        == "master_admin"
+    ):
+        return list(MENU_KEYS)
+
+    values = user.get(
+        "menu_access"
+    )
+
+    if not isinstance(
+        values,
+        list,
+    ):
+        return list(MENU_KEYS)
+
+    selected = set(values)
+
+    return [
+        key
+        for key in MENU_KEYS
+        if key in selected
+    ]
+
+
 def _validate_body(
     body: RoleProfileBody,
+    user: dict,
 ) -> dict:
+    allowed_roles = (
+        CREATABLE_BASE_ROLES.get(
+            user.get("role"),
+            set(),
+        )
+    )
+
     if (
         body.base_role
         not in BASE_ROLES
+        or body.base_role
+        not in allowed_roles
     ):
         raise HTTPException(
-            status_code=400,
+            status_code=403,
             detail=(
-                "Custom roles must use "
-                "Admin, Supervisor, "
-                "Technician, or Viewer "
-                "as the base permission level"
+                "You cannot create a custom role "
+                "with this base permission level"
             ),
         )
 
@@ -114,17 +165,40 @@ def _validate_body(
         )
     )
 
+    menu_access = (
+        _normalize_menu(
+            body.menu_access
+        )
+    )
+
+    allowed_menu = set(
+        _allowed_menu_access(
+            user
+        )
+    )
+
+    forbidden = [
+        key
+        for key in menu_access
+        if key not in allowed_menu
+    ]
+
+    if forbidden:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "You can only grant menu access "
+                "that is available to your own account"
+            ),
+        )
+
     return {
         "name": name,
         "name_key": name_key,
         "base_role": (
             body.base_role
         ),
-        "menu_access": (
-            _normalize_menu(
-                body.menu_access
-            )
-        ),
+        "menu_access": menu_access,
     }
 
 
@@ -178,11 +252,12 @@ async def list_role_profiles(
 async def create_role_profile(
     body: RoleProfileBody,
     user: dict = Depends(
-        MASTER_ADMIN
+        CUSTOM_ROLE_ADMIN
     ),
 ):
     values = _validate_body(
-        body
+        body,
+        user,
     )
 
     doc = {
@@ -230,7 +305,7 @@ async def update_role_profile(
     profile_id: str,
     body: RoleProfileBody,
     user: dict = Depends(
-        MASTER_ADMIN
+        CUSTOM_ROLE_ADMIN
     ),
 ):
     existing = (
@@ -248,7 +323,8 @@ async def update_role_profile(
         )
 
     values = _validate_body(
-        body
+        body,
+        user,
     )
 
     values["updated_at"] = (
@@ -269,9 +345,8 @@ async def update_role_profile(
             ),
         )
 
-    # A custom role is a role template, not just a label.
-    # Keep every assigned account synchronized when the
-    # Master Admin changes its permission level or menus.
+    # Keep the role identity/base permission synchronized,
+    # but preserve each user's individual Menu Access selections.
     await db.users.update_many(
         {
             "role_profile_id": (
@@ -287,11 +362,6 @@ async def update_role_profile(
                 ),
                 "role_profile_name": (
                     values["name"]
-                ),
-                "menu_access": (
-                    values[
-                        "menu_access"
-                    ]
                 ),
             }
         },
@@ -323,7 +393,7 @@ async def update_role_profile(
 async def delete_role_profile(
     profile_id: str,
     user: dict = Depends(
-        MASTER_ADMIN
+        CUSTOM_ROLE_ADMIN
     ),
 ):
     existing = (

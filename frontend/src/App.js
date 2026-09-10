@@ -10,7 +10,6 @@ import {
   hasLicenseFeature,
   hasMenuAccess,
   isAdmin,
-  isMasterAdmin,
 } from "@/context/AuthContext";
 import { CurrencyProvider } from "@/context/CurrencyContext";
 import AppLayout from "@/components/AppLayout";
@@ -123,7 +122,7 @@ function AppRoutes() {
       <Route path="/settings" element={<RoleRoute allow={isAdmin} menu="set"><SettingsPage /></RoleRoute>} />
       <Route path="/version-history" element={<RoleRoute allow={isAdmin} menu="set"><VersionHistory /></RoleRoute>} />
       <Route path="/version-log" element={<Navigate to="/version-history" replace />} />
-      <Route path="/roles" element={<RoleRoute allow={isMasterAdmin} menu="usr"><RoleProfiles /></RoleRoute>} />
+      <Route path="/roles" element={<RoleRoute allow={isAdmin} menu="usr"><RoleProfiles /></RoleRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

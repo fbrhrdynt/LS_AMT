@@ -788,19 +788,6 @@ async def set_menu_access(
             ),
         )
 
-    if target.get(
-        "role_profile_id"
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Menu access is managed by "
-                "the assigned custom role. "
-                "Change the custom role or edit "
-                "the role profile instead."
-            ),
-        )
-
     if _effective_role(target) == "master_admin":
         access = list(MENU_KEYS)
     else:
@@ -896,11 +883,18 @@ async def create_user(
 
         (
             requested_role,
-            menu_access,
+            _profile_default_access,
         ) = (
             _validate_role_profile_for_actor(
                 user,
                 profile,
+            )
+        )
+
+        menu_access = (
+            _validate_delegated_menu_access(
+                user,
+                body.menu_access,
             )
         )
     else:

@@ -19,6 +19,10 @@ import {
   formatApiError,
 } from "@/lib/api";
 import {
+  isMasterAdmin,
+  useAuth,
+} from "@/context/AuthContext";
+import {
   Btn,
   EmptyState,
   PageHeader,
@@ -55,12 +59,20 @@ const ALL_MENU_KEYS =
     ([key]) => key
   );
 
-const BASE_ROLES = [
-  ["admin", "Admin"],
-  ["supervisor", "Supervisor"],
-  ["technician", "Technician"],
-  ["viewer", "Viewer"],
-];
+const BASE_ROLE_OPTIONS = {
+  master_admin: [
+    ["admin", "Admin"],
+    ["supervisor", "Supervisor"],
+    ["technician", "Technician"],
+    ["viewer", "Viewer"],
+  ],
+  admin: [
+    ["admin", "Admin"],
+    ["supervisor", "Supervisor"],
+    ["technician", "Technician"],
+    ["viewer", "Viewer"],
+  ],
+};
 
 const EMPTY = {
   name: "",
@@ -73,6 +85,33 @@ const EMPTY = {
 
 export default function RoleProfiles() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const baseRoles =
+    BASE_ROLE_OPTIONS[
+      user?.role
+    ] || [];
+
+  const allowedMenuKeys =
+    isMasterAdmin(user) ||
+    !Array.isArray(
+      user?.menu_access
+    )
+      ? [...ALL_MENU_KEYS]
+      : ALL_MENU_KEYS.filter(
+          (key) =>
+            user.menu_access.includes(
+              key
+            )
+        );
+
+  const allowedMenuOptions =
+    MENU_OPTIONS.filter(
+      ([key]) =>
+        allowedMenuKeys.includes(
+          key
+        )
+    );
 
   const [
     profiles,
@@ -133,7 +172,7 @@ export default function RoleProfiles() {
     setForm({
       ...EMPTY,
       menu_access: [
-        ...ALL_MENU_KEYS,
+        ...allowedMenuKeys,
       ],
     });
     setDialog(true);
@@ -271,11 +310,11 @@ export default function RoleProfiles() {
 
           <div>
             <div className="text-sm font-semibold text-slate-900">
-              Master Admin role templates
+              Admin custom role templates
             </div>
 
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              A custom role combines a role name, a built-in permission level, and menu access. For example, Service Planner can use Supervisor permissions with planning menus, while Storekeeper can use Technician permissions with Parts &amp; Materials access.
+              Master Admin and Admin can create custom roles. The available permission level and menu delegation follow the creator's existing account authority. For example, an Admin can create Storekeeper with Technician as the base permission.
             </p>
 
             <p className="mt-1 text-xs leading-5 text-slate-500">
@@ -425,7 +464,7 @@ export default function RoleProfiles() {
               })
             }
           >
-            {BASE_ROLES.map(
+            {baseRoles.map(
               ([value, label]) => (
                 <option
                   key={value}
@@ -456,7 +495,7 @@ export default function RoleProfiles() {
                     setForm({
                       ...form,
                       menu_access: [
-                        ...ALL_MENU_KEYS,
+                        ...allowedMenuKeys,
                       ],
                     })
                   }
@@ -480,7 +519,7 @@ export default function RoleProfiles() {
             </div>
 
             <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
-              {MENU_OPTIONS.map(
+              {allowedMenuOptions.map(
                 ([key, label]) => (
                   <label
                     key={key}
@@ -516,7 +555,7 @@ export default function RoleProfiles() {
                         setForm({
                           ...form,
                           menu_access:
-                            ALL_MENU_KEYS.filter(
+                            allowedMenuKeys.filter(
                               (item) =>
                                 selected.has(
                                   item

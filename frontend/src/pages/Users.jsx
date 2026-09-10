@@ -25,6 +25,7 @@ import {
 } from "@/lib/api";
 import {
   canManageUsers,
+  isAdmin,
   isMasterAdmin,
   useAuth,
 } from "@/context/AuthContext";
@@ -538,7 +539,7 @@ export default function UsersPage() {
         title="Users"
         subtitle="Role hierarchy and menu access"
       >
-        {isMasterAdmin(user) && (
+        {isAdmin(user) && (
           <Btn
             variant="outline"
             onClick={() =>
@@ -561,11 +562,12 @@ export default function UsersPage() {
           User hierarchy
         </div>
         <div className="mt-1 text-xs leading-5 text-slate-500">
-          Master Admin can manage all built-in roles and create custom
-          role templates. Admin can manage Admin, Supervisor, Technician
+          Master Admin and Admin can create custom role templates.
+          The available base permission level follows the creator's existing
+          account authority. Admin can manage Admin, Supervisor, Technician
           and Viewer. Supervisor can manage Technician and Viewer. Custom
-          roles keep a built-in permission level underneath, so existing
-          AMT security rules remain enforced.
+          roles keep a built-in permission level underneath, while Menu Access
+          remains configurable per user account.
         </div>
       </div>
 
@@ -698,10 +700,7 @@ export default function UsersPage() {
                         disabled={
                           !manageable ||
                           target.id === user.id ||
-                          target.role === "master_admin" ||
-                          Boolean(
-                            target.role_profile_id
-                          )
+                          target.role === "master_admin"
                         }
                         onClick={() => openAccess(target)}
                         className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -709,9 +708,7 @@ export default function UsersPage() {
                         <KeyRound className="h-3.5 w-3.5" />
                         {target.role === "master_admin"
                           ? "All menus"
-                          : target.role_profile_id
-                            ? `${access.length} menu(s) · role managed`
-                            : `${access.length} menu(s)`}
+                          : `${access.length} menu(s)`}
                       </button>
                     </td>
 
@@ -983,13 +980,10 @@ export default function UsersPage() {
                 : delegableMenuKeys
             }
             disabled={
-              masterSelected ||
-              profileSelected
+              masterSelected
             }
             disabledMessage={
-              profileSelected
-                ? "Menu access is managed by the selected custom role profile."
-                : "Master Admin always has access to all menus."
+              "Master Admin always has access to all menus."
             }
             onChange={(menu_access) =>
               setForm({ ...form, menu_access })

@@ -7,6 +7,23 @@
   },
   "versions": [
     {
+      "version": "1.1.9",
+      "status": "stable",
+      "title": "Admin Custom Roles & Per-User Menu Access",
+      "summary": "Extended custom-role management to Admin accounts and made Menu Access individually configurable when creating or managing users assigned to custom roles.",
+      "changes": [
+        "Master Admin and Admin can access and manage Custom Roles.",
+        "Custom-role base permission levels are validated against the authority of the account creating or editing the role.",
+        "Custom-role menu defaults cannot grant menus beyond those available to the creator.",
+        "Admins can create organization roles such as Storekeeper with Technician as the base permission.",
+        "When creating a user with a custom role, Menu Access remains editable with checkboxes.",
+        "The custom role provides the base permission and default menu selection, while each user keeps an individual Menu Access configuration.",
+        "Menu Access can also be changed later for users assigned to custom roles.",
+        "Editing a custom role keeps assigned users' individual Menu Access selections while synchronizing the role name and base permission.",
+        "Protected Master Admin authority remains built in and cannot be created as a custom role."
+      ]
+    },
+    {
       "version": "1.1.8",
       "status": "stable",
       "title": "Version Log & Custom User Roles",
