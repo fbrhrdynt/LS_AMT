@@ -213,10 +213,26 @@ Public QR pages are intentionally separate from authenticated AMT pages.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.6**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.7**.
 
-### 1.1.6 - Reporting, Version History & Public Guide
+### 1.1.7 - Reporting, Version History & Public Guide
 
+- Replacement stable release for the revoked **1.1.6** package.
+- Added **Version History & Public Product Guide** in Settings for **Master Admin** and **Admin**.
+- Version History is placed at the bottom of Settings and remains collapsed until **View Version History** is selected.
+- Added one always-current **AMT Public Product Overview PDF** generated on demand without accumulating persistent PDF files.
+- Public Equipment Passport follows configured company branding and falls back to the official bundled AMT logo after reset.
+- Maintenance Reports support checkbox selection for selective export.
+- Selected maintenance records can be exported into one consolidated PDF or one Excel workbook.
+- Existing full filtered maintenance PDF and Excel exports remain available.
+- Excel exports include a title, generated timestamp, company or official AMT logo, styled headers, wrapped cells, filters, freeze panes, print layout, and AMT product credit.
+- PDF and Excel exports use the configured company logo when available and otherwise the official bundled AMT logo.
+- Synthetic text-only AMT logo fallback remains removed from report exports.
+- Release packaging now writes a dedicated validated `signature-base64.txt` file for safer entry into LS CRM.
+
+### 1.1.6 - Reporting, Version History & Public Guide - Revoked
+
+- **Revoked during CRM release publication** after the release-signature metadata was rejected as invalid Base64. Do not install 1.1.6; use 1.1.7 instead.
 - Added **Version History & Public Product Guide** in Settings for **Master Admin** and **Admin**.
 - Version History is placed at the bottom of Settings and remains collapsed until **View Version History** is selected.
 - Added one always-current **AMT Public Product Overview PDF** generated on demand without accumulating persistent PDF files.

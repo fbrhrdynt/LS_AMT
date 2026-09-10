@@ -98,6 +98,7 @@ PACKAGE="$TARGET_DIR/$PACKAGE_NAME"
 SIG="$TARGET_DIR/$SIG_NAME"
 MANIFEST="$TARGET_DIR/manifest.json"
 CRM_INFO="$TARGET_DIR/crm-release.txt"
+SIGNATURE_B64_FILE="$TARGET_DIR/signature-base64.txt"
 
 if [ -e "$PACKAGE" ] || [ -e "$MANIFEST" ]; then
   fail "Release $VERSION already exists. Published versions are immutable; use a new version."
@@ -161,6 +162,49 @@ VERIFY_OUTPUT="$(
 [ "$VERIFY_OUTPUT" = "Verified OK" ] || fail "Signature verification failed: $VERIFY_OUTPUT"
 
 SIGNATURE_B64="$(base64 -w0 "$SIG")"
+
+printf '%s' "$SIGNATURE_B64" > "$SIGNATURE_B64_FILE"
+
+python3 - "$SIGNATURE_B64_FILE" <<'PY'
+import base64
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+value = path.read_text(encoding="ascii")
+
+if (
+    not value
+    or value.strip() != value
+    or any(ch.isspace() for ch in value)
+):
+    raise SystemExit(
+        "ERROR: signature-base64.txt contains whitespace"
+    )
+
+try:
+    decoded = base64.b64decode(
+        value,
+        validate=True,
+    )
+except Exception as exc:
+    raise SystemExit(
+        "ERROR: generated release signature is not valid Base64: "
+        f"{exc}"
+    )
+
+if not decoded:
+    raise SystemExit(
+        "ERROR: decoded release signature is empty"
+    )
+
+print(
+    "Validated CRM Base64 signature:",
+    len(value),
+    "characters",
+)
+PY
+
 SIZE_BYTES="$(stat -c '%s' "$PACKAGE")"
 CREATED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 PACKAGE_URL="$RELEASE_HOST/releases/$VERSION/$PACKAGE_NAME"
@@ -247,6 +291,7 @@ echo "AMT release $VERSION is ready."
 echo "Package:  $PACKAGE_URL"
 echo "SHA256:   $SHA256"
 echo "Signature verification: Verified OK"
+echo "CRM signature file: $SIGNATURE_B64_FILE"
 echo
 echo "CRM values:"
 echo "----------------------------------------"

@@ -7,10 +7,31 @@
   },
   "versions": [
     {
-      "version": "1.1.6",
+      "version": "1.1.7",
       "status": "stable",
       "title": "Reporting, Version History & Public Guide",
-      "summary": "Added user-facing version history, an always-current public AMT product guide, selective maintenance exports, and professional branded Excel reporting.",
+      "summary": "Replacement stable release for the revoked 1.1.6 package, including selective maintenance exports, public product documentation, branding consistency, and safer CRM signature handoff.",
+      "changes": [
+        "Replaces revoked release 1.1.6 with a new immutable signed package.",
+        "Added Version History & Public Product Guide in Settings for Master Admin and Admin.",
+        "Version History is placed at the bottom of Settings and remains collapsed until View Version History is selected.",
+        "Added one always-current AMT Public Product Overview PDF generated on demand without accumulating persistent PDF files.",
+        "Public Equipment Passport follows configured company branding and falls back to the official bundled AMT logo after reset.",
+        "Maintenance Reports support checkbox selection so users can export only selected maintenance records.",
+        "Selected maintenance records can be exported into one consolidated PDF or one Excel workbook.",
+        "Existing full filtered maintenance PDF and Excel exports remain available.",
+        "Excel exports include title, generated timestamp, company or official AMT logo, styled headers, wrapped cells, filters, freeze panes, print layout, and AMT product credit.",
+        "PDF and Excel export branding uses the configured company logo when available and otherwise the official bundled AMT logo.",
+        "Synthetic text-only AMT logo fallback remains removed from report exports.",
+        "Release builder validates the target version against tracked version history before packaging.",
+        "Release builder now writes a dedicated signature-base64.txt file containing only the validated Base64 signature for safer copy/paste into LS CRM."
+      ]
+    },
+    {
+      "version": "1.1.6",
+      "status": "revoked",
+      "title": "Reporting, Version History & Public Guide",
+      "summary": "Release package revoked during CRM publication after release-signature metadata was rejected as invalid Base64. The product changes were carried forward to 1.1.7.",
       "changes": [
         "Added Version History & Public Product Guide in Settings for Master Admin and Admin.",
         "Version History is placed at the bottom of Settings and remains collapsed until View Version History is selected.",
@@ -22,7 +43,8 @@
         "Excel exports now include title, generated timestamp, company or official AMT logo, styled headers, wrapped cells, filters, freeze panes, print layout, and AMT product credit.",
         "PDF and Excel export branding uses the configured company logo when available and otherwise the official bundled AMT logo.",
         "Removed synthetic text-only AMT logo fallback from report exports.",
-        "Release builder now verifies that the target version is documented before creating a signed release package."
+        "Release builder now verifies that the target version is documented before creating a signed release package.",
+        "Release 1.1.6 was revoked during publication and should not be installed; its product changes are superseded by 1.1.7."
       ]
     },
     {
