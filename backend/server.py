@@ -21,6 +21,7 @@ from settings_routes import router as settings_router
 from export_routes import router as export_router
 from license_routes import router as license_router
 from update_routes import router as update_router
+from product_routes import router as product_router
 from public_access import backfill_equipment_public_tokens
 from importer import seed_from_excel
 from storage import init_storage
@@ -130,6 +131,7 @@ app.include_router(settings_router)
 app.include_router(export_router)
 app.include_router(license_router)
 app.include_router(update_router)
+app.include_router(product_router)
 
 
 async def _ensure_indexes():

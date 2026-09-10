@@ -37,11 +37,43 @@ esac
 [ -f "$PRIVATE_KEY" ] || fail "Private signing key not found: $PRIVATE_KEY"
 [ -f "$PUBLIC_KEY" ] || fail "Public verification key not found: $PUBLIC_KEY"
 
-for cmd in git tar openssl sha256sum rsync curl; do
+for cmd in git tar openssl sha256sum rsync curl python3; do
   command -v "$cmd" >/dev/null || fail "Required command not found: $cmd"
 done
 
 cd "$REPO"
+
+
+VERSION_HISTORY="$REPO/backend/version_history.json"
+[ -f "$VERSION_HISTORY" ] || fail "Version history file not found: $VERSION_HISTORY"
+
+python3 - "$VERSION_HISTORY" "$VERSION" <<'PY'
+import json
+import sys
+
+path, target = sys.argv[1], sys.argv[2]
+
+with open(path, "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+
+versions = data.get("versions") or []
+
+if not versions:
+    raise SystemExit(
+        "ERROR: version_history.json has no versions"
+    )
+
+latest = str(
+    versions[0].get("version") or ""
+).strip()
+
+if latest != target:
+    raise SystemExit(
+        "ERROR: release notes must be updated before build. "
+        f"Latest documented version is {latest!r}, "
+        f"target release is {target!r}."
+    )
+PY
 
 BRANCH="$(git_user branch --show-current)"
 [ "$BRANCH" = "main" ] || fail "Release must be built from main. Current branch: $BRANCH"

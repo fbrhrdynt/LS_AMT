@@ -9,6 +9,8 @@
   ·
   <a href="#features">Features</a>
   ·
+  <a href="#version-history">Version History</a>
+  ·
   <a href="#quick-start">Quick Start</a>
   ·
   <a href="#deployment">Deployment</a>
@@ -196,14 +198,76 @@ AMT uses JWT-based authentication with the following application roles:
 
 | Role | Typical Access |
 | --- | --- |
-| `admin` | Full administration and user management |
-| `supervisor` | Operational management |
+| `master_admin` | Full platform administration, licensing, exports, updates, and protected master controls |
+| `admin` | Administration, user management, Version & Updates, and eligible Application Branding |
+| `supervisor` | Operational management and delegated user management |
 | `technician` | Maintenance and operational updates |
 | `viewer` | Read-only authenticated access |
 
 Public QR pages are intentionally separate from authenticated AMT pages.
 
 ---
+
+## Version History
+
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.5**.
+
+### 1.1.5 - Admin Branding & Update Access
+
+- Corrected Settings access so both **Master Admin** and **Admin** can use **Version & Updates**.
+- Both roles can use eligible **Application Branding**.
+- Backend license protection remains active.
+- Supervisor, Technician, and Viewer remain restricted from update and branding administration.
+
+### 1.1.4 - Unified Pro Branding
+
+- Added company-logo branding for the application shell and sign-in experience.
+- Unified company branding across Maintenance PDFs and exported PDFs.
+- Added **Reset to AMT Logo** while retaining the original built-in AMT logo.
+- Standardized PDF credit to **Powered by AMT (Asset Maintenance Tracker) - LogiSource Digital**.
+- Added the Admin update-access foundation completed in 1.1.5.
+
+### 1.1.3 - Updater Reliability & Release Integrity
+
+- Fixed stale updater-status reporting during installations.
+- Corrected environment-example exclusion handling.
+- Improved release-builder Git/SSH user handling.
+- Hardened updater ownership, permissions, and runtime-version behavior.
+
+### 1.1.2 - Secure Self-Update Stabilization
+
+- Stabilized signed self-updates.
+- Added reliable runtime-version tracking.
+- Preserved production frontend environment configuration during updates.
+- Improved backup, rollback, ownership, and permission handling.
+- Continued SHA256 and public-key signature verification before installation.
+
+### 1.1.1 - Feature Rollup & Secure Update Foundation - Revoked
+
+- Consolidated QR Equipment Passport, maintenance-document organization, calibration tracking, role/menu controls, licensing, and secure update foundations.
+- Release 1.1.1 was **revoked** after updater deployment validation exposed runtime-preservation issues.
+- Functional improvements were carried forward into corrected later releases.
+- Existing installations should not use 1.1.1.
+
+### 1.0.0 - Initial Production Release
+
+- Initial self-hosted production baseline.
+- Equipment registry and equipment history.
+- Maintenance lifecycle and reporting.
+- Inventory, spare parts, and materials tracking.
+- Client, job, assignment, and location workflows.
+- Reports, audit history, role-based access, MongoDB data, and private document storage.
+
+### Version History in AMT Settings
+
+Master Admin and Admin can view the product-facing version history from **Settings** and download one always-current **AMT Public Product Overview PDF**.
+
+The PDF is generated in memory from the tracked version-history source. It is not stored as one file per release, so application storage does not grow with each version.
+
+Before a signed release can be built, `deploy/build-release.sh` verifies that the target version is already the newest entry in `backend/version_history.json`. This keeps website release notes and the public product PDF aligned with every release.
+
+> Credentials, license keys, private signing material, database connection information, and customer operational data are intentionally excluded from public product documentation.
+
 
 ## Architecture
 

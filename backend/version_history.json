@@ -1,0 +1,84 @@
+{
+  "product": {
+    "name": "AMT - Asset Maintenance Tracker",
+    "developer": "LogiSource Digital",
+    "tagline": "Track every asset. Know every maintenance history.",
+    "public_credit": "Powered by AMT (Asset Maintenance Tracker) - LogiSource Digital"
+  },
+  "versions": [
+    {
+      "version": "1.1.5",
+      "status": "stable",
+      "title": "Admin Branding & Update Access",
+      "summary": "Corrected Settings access for Admin and Master Admin.",
+      "changes": [
+        "Master Admin and Admin can access Version & Updates.",
+        "Master Admin and Admin can access eligible Application Branding.",
+        "Backend license checks remain active for protected licensed features.",
+        "Supervisor, Technician, and Viewer remain restricted from update and branding administration."
+      ]
+    },
+    {
+      "version": "1.1.4",
+      "status": "stable",
+      "title": "Unified Pro Branding",
+      "summary": "Unified company branding across AMT web and generated PDFs.",
+      "changes": [
+        "Added company-logo branding for the application shell and sign-in experience.",
+        "Unified company branding across Maintenance PDFs and exported PDFs.",
+        "Added Reset to AMT Logo while retaining the built-in AMT logo permanently.",
+        "Standardized PDF credit to: Powered by AMT (Asset Maintenance Tracker) - LogiSource Digital.",
+        "Introduced the Admin update-access foundation completed in 1.1.5."
+      ]
+    },
+    {
+      "version": "1.1.3",
+      "status": "stable",
+      "title": "Updater Reliability & Release Integrity",
+      "summary": "Improved signed updater reliability and release consistency.",
+      "changes": [
+        "Fixed stale updater status reporting during new installations.",
+        "Corrected release exclusion handling so tracked environment example files are preserved.",
+        "Improved release-builder Git and SSH user handling.",
+        "Hardened updater deployment ownership, permissions, and runtime-version behavior."
+      ]
+    },
+    {
+      "version": "1.1.2",
+      "status": "stable",
+      "title": "Secure Self-Update Stabilization",
+      "summary": "Stabilized signed self-update installation and rollback behavior.",
+      "changes": [
+        "Added reliable runtime-version tracking separate from the source fallback VERSION file.",
+        "Preserved production frontend environment configuration during updates.",
+        "Improved source ownership, permissions, backup behavior, and rollback safety.",
+        "Continued SHA256 and public-key signature verification before installation."
+      ]
+    },
+    {
+      "version": "1.1.1",
+      "status": "revoked",
+      "title": "Feature Rollup & Secure Update Foundation",
+      "summary": "Major AMT feature rollup and initial secure update foundation.",
+      "changes": [
+        "Consolidated QR Equipment Passport, maintenance-document organization, calibration tracking, role/menu controls, licensing, and secure update foundations.",
+        "The 1.1.1 package was revoked after deployment validation exposed updater/runtime-preservation issues.",
+        "Functional improvements were carried forward into corrected later releases.",
+        "Existing installations should not use 1.1.1."
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "status": "initial",
+      "title": "Initial Production Release",
+      "summary": "Initial self-hosted AMT production baseline.",
+      "changes": [
+        "Equipment registry and equipment history.",
+        "Maintenance lifecycle and reporting.",
+        "Inventory, spare parts, and materials tracking.",
+        "Client, job, assignment, and location workflows.",
+        "Reports, audit history, role-based access, MongoDB data, and private document storage."
+      ]
+    }
+  ]
+}

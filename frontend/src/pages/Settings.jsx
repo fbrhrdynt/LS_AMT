@@ -1,7 +1,9 @@
 import {
+  BookOpen,
   Coins,
   Code2,
   Database,
+  FileDown,
   Globe2,
   ImagePlus,
   KeyRound,
@@ -122,8 +124,21 @@ export default function SettingsPage() {
     setLogoVersion,
   ] = useState(0);
 
+  const [
+    versionHistory,
+    setVersionHistory,
+  ] = useState(null);
+
+  const [
+    versionHistoryLoading,
+    setVersionHistoryLoading,
+  ] = useState(false);
+
   const masterAdmin =
     isMasterAdmin(user);
+
+  const settingsAdmin =
+    isAdmin(user);
 
   const canExportCodeDb =
     masterAdmin &&
@@ -139,7 +154,7 @@ export default function SettingsPage() {
     );
 
   const canCustomBrand =
-    isAdmin(user);
+    settingsAdmin;
 
   useEffect(() => {
     api
@@ -165,6 +180,50 @@ export default function SettingsPage() {
       })
       .catch(() => {});
   }, []);
+
+
+  useEffect(() => {
+    if (!settingsAdmin) {
+      setVersionHistory(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    setVersionHistoryLoading(
+      true
+    );
+
+    api
+      .get(
+        "/product/version-history"
+      )
+      .then(({ data }) => {
+        if (!cancelled) {
+          setVersionHistory(
+            data
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setVersionHistory(
+            null
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setVersionHistoryLoading(
+            false
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsAdmin]);
 
   const timezones =
     useMemo(
@@ -518,6 +577,124 @@ export default function SettingsPage() {
 
       <div className="space-y-6">
         <UpdatePanel />
+
+
+        {settingsAdmin && (
+          <Panel className="p-4">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
+                    <BookOpen className="h-4 w-4 text-blue-600" />
+                    Version History &amp; Public Product Guide
+                    <span className="rounded bg-violet-700 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">
+                      Master Admin &amp; Admin
+                    </span>
+                  </div>
+
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Product-facing release notes and one always-current public AMT overview PDF. The PDF is generated on demand and is not accumulated in application storage.
+                  </p>
+                </div>
+
+                <Btn
+                  variant="outline"
+                  onClick={() =>
+                    window.open(
+                      `${API}/product/public-guide.pdf`,
+                      "_blank"
+                    )
+                  }
+                >
+                  <FileDown className="h-4 w-4" />
+                  Download Public PDF
+                </Btn>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Installed Version
+                  </div>
+                  <div className="mt-1 font-mono text-sm font-semibold text-slate-900">
+                    {versionHistory?.installed_version || "—"}
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Documented Latest
+                  </div>
+                  <div className="mt-1 font-mono text-sm font-semibold text-slate-900">
+                    {versionHistory?.documented_latest || "—"}
+                  </div>
+                </div>
+              </div>
+
+              {versionHistoryLoading ? (
+                <div className="text-xs text-slate-400">
+                  Loading version history…
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(versionHistory?.versions || []).map(
+                    (release) => (
+                      <div
+                        key={release.version}
+                        className="rounded-md border border-slate-200 bg-white p-3"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-sm font-bold text-slate-900">
+                            {release.version}
+                          </span>
+
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                              release.status === "revoked"
+                                ? "bg-red-100 text-red-700"
+                                : release.status === "stable"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {release.status}
+                          </span>
+
+                          {release.version ===
+                            versionHistory?.documented_latest && (
+                            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-blue-700">
+                              Latest
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-1 text-sm font-semibold text-slate-800">
+                          {release.title}
+                        </div>
+
+                        <div className="mt-1 text-xs leading-5 text-slate-500">
+                          {release.summary}
+                        </div>
+
+                        {release.changes?.length > 0 && (
+                          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5 text-slate-500">
+                            {release.changes.map(
+                              (change) => (
+                                <li key={change}>
+                                  {change}
+                                </li>
+                              )
+                            )}
+                          </ul>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          </Panel>
+        )}
 
         <Panel className="p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

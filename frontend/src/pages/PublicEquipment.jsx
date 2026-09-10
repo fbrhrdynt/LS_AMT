@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { API, api } from "@/lib/api";
+import BrandLogo from "@/components/BrandLogo";
 
 
 function fmtDate(value) {
@@ -306,8 +307,8 @@ export default function PublicEquipment() {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-4xl px-4 py-4 sm:px-6">
           <div className="flex items-center justify-between gap-4">
-            <img
-              src="/amt-mark-tagline.png"
+            <BrandLogo
+              fallback="/amt-mark-tagline.png"
               alt="AMT - Asset Maintenance Tracker"
               className="h-auto w-48 max-w-[58vw] object-contain object-left sm:w-60"
             />
