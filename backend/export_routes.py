@@ -7,7 +7,15 @@ from xml.sax.saxutils import escape
 
 import openpyxl
 from fastapi import APIRouter, Depends, HTTPException, Response
-from openpyxl.styles import Font
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.styles import (
+    Alignment,
+    Border,
+    Font,
+    PatternFill,
+    Side,
+)
+from openpyxl.utils import get_column_letter
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -122,6 +130,30 @@ async def _equipment_rows(params):
 
 async def _maintenance_rows(params):
     query = {}
+
+    maintenance_ids = [
+        value.strip()
+        for value in str(
+            params.get("maintenance_ids", "")
+            or ""
+        ).split(",")
+        if value.strip()
+    ]
+
+    if len(maintenance_ids) > 500:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "A maximum of 500 maintenance "
+                "records can be exported at once"
+            ),
+        )
+
+    if maintenance_ids:
+        query["id"] = {
+            "$in": maintenance_ids
+        }
+
     for key in ("status", "client_id", "job_id"):
         if params.get(key):
             query[key] = params[key]
@@ -423,18 +455,275 @@ async def _dataset(dataset, params, user):
     return await loader(params)
 
 
-def _xlsx_bytes(title, headers, rows):
+def _xlsx_bytes(
+    title,
+    headers,
+    rows,
+    timezone_name,
+    brand_logo_bytes=None,
+):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = title[:31]
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-    for row in rows:
-        ws.append([_safe_excel(v) for v in row])
-    for column in ws.columns:
-        max_len = max((len(str(cell.value or "")) for cell in column[:300]), default=0)
-        ws.column_dimensions[column[0].column_letter].width = min(max(max_len + 2, 10), 42)
+    ws.sheet_view.showGridLines = False
+
+    generated = _local_now(
+        timezone_name
+    )
+
+    data_column_count = max(
+        1,
+        len(headers),
+    )
+    layout_column_count = max(
+        data_column_count,
+        6,
+    )
+    layout_last = get_column_letter(
+        layout_column_count
+    )
+    data_last = get_column_letter(
+        data_column_count
+    )
+
+    ws.merge_cells(
+        f"D1:{layout_last}1"
+    )
+    ws["D1"] = (
+        f"AMT - {title} Export"
+    )
+    ws["D1"].font = Font(
+        bold=True,
+        size=18,
+        color="0F172A",
+    )
+    ws["D1"].alignment = Alignment(
+        vertical="center",
+    )
+
+    ws.merge_cells(
+        f"D2:{layout_last}2"
+    )
+    ws["D2"] = (
+        "Generated "
+        f"{generated.strftime('%Y-%m-%d %H:%M %Z')} "
+        f"- {len(rows)} record(s)"
+    )
+    ws["D2"].font = Font(
+        size=9,
+        color="64748B",
+    )
+
+    ws.row_dimensions[1].height = 30
+    ws.row_dimensions[2].height = 18
+    ws.row_dimensions[3].height = 8
+
+    logo_source = None
+    if brand_logo_bytes:
+        logo_source = io.BytesIO(
+            brand_logo_bytes
+        )
+    elif AMT_MARK_TAGLINE.exists():
+        logo_source = str(
+            AMT_MARK_TAGLINE
+        )
+
+    if logo_source is not None:
+        try:
+            logo = XLImage(
+                logo_source
+            )
+            scale = min(
+                180 / logo.width,
+                62 / logo.height,
+            )
+            logo.width = int(
+                logo.width * scale
+            )
+            logo.height = int(
+                logo.height * scale
+            )
+            ws.add_image(
+                logo,
+                "A1",
+            )
+        except Exception:
+            pass
+
+    header_row = 5
+
+    thin = Side(
+        style="thin",
+        color="CBD5E1",
+    )
+    border = Border(
+        left=thin,
+        right=thin,
+        top=thin,
+        bottom=thin,
+    )
+
+    for index, value in enumerate(
+        headers,
+        start=1,
+    ):
+        cell = ws.cell(
+            row=header_row,
+            column=index,
+            value=_safe_excel(value),
+        )
+        cell.font = Font(
+            bold=True,
+            color="FFFFFF",
+            size=9,
+        )
+        cell.fill = PatternFill(
+            "solid",
+            fgColor="0F172A",
+        )
+        cell.alignment = Alignment(
+            horizontal="left",
+            vertical="center",
+            wrap_text=True,
+        )
+        cell.border = border
+
+    ws.row_dimensions[
+        header_row
+    ].height = 28
+
+    for row_index, values in enumerate(
+        rows,
+        start=header_row + 1,
+    ):
+        for column_index, value in enumerate(
+            values,
+            start=1,
+        ):
+            cell = ws.cell(
+                row=row_index,
+                column=column_index,
+                value=_safe_excel(value),
+            )
+            cell.font = Font(
+                size=9,
+                color="0F172A",
+            )
+            cell.alignment = Alignment(
+                vertical="top",
+                wrap_text=True,
+            )
+            cell.border = border
+
+            if (
+                row_index - header_row
+            ) % 2 == 0:
+                cell.fill = PatternFill(
+                    "solid",
+                    fgColor="F8FAFC",
+                )
+
+    for column_index in range(
+        1,
+        data_column_count + 1,
+    ):
+        letter = get_column_letter(
+            column_index
+        )
+        max_len = len(
+            str(
+                headers[
+                    column_index - 1
+                ]
+                or ""
+            )
+        )
+
+        for row_index in range(
+            header_row + 1,
+            min(
+                header_row
+                + len(rows)
+                + 1,
+                header_row + 301,
+            ),
+        ):
+            value = ws.cell(
+                row=row_index,
+                column=column_index,
+            ).value
+            max_len = max(
+                max_len,
+                len(
+                    str(
+                        value
+                        or ""
+                    )
+                ),
+            )
+
+        ws.column_dimensions[
+            letter
+        ].width = min(
+            max(
+                max_len + 2,
+                11,
+            ),
+            32,
+        )
+
+    if title.lower() == "maintenance":
+        preferred = {
+            5: 24,
+            8: 24,
+            12: 30,
+            13: 30,
+        }
+        for column_index, width in preferred.items():
+            if column_index <= data_column_count:
+                ws.column_dimensions[
+                    get_column_letter(
+                        column_index
+                    )
+                ].width = width
+
+    ws.freeze_panes = (
+        f"A{header_row + 1}"
+    )
+
+    if rows:
+        ws.auto_filter.ref = (
+            f"A{header_row}:"
+            f"{data_last}"
+            f"{header_row + len(rows)}"
+        )
+
+    ws.print_title_rows = (
+        f"1:{header_row}"
+    )
+    ws.print_area = (
+        f"A1:{data_last}"
+        f"{header_row + max(1, len(rows))}"
+    )
+    ws.page_setup.orientation = (
+        "landscape"
+    )
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_margins.left = 0.25
+    ws.page_margins.right = 0.25
+    ws.page_margins.top = 0.4
+    ws.page_margins.bottom = 0.45
+    ws.oddFooter.center.text = (
+        "Powered by AMT "
+        "(Asset Maintenance Tracker) "
+        "- LogiSource Digital"
+    )
+    ws.oddFooter.right.text = (
+        "Page &P of &N"
+    )
+
     out = io.BytesIO()
     wb.save(out)
     out.seek(0)
@@ -546,16 +835,7 @@ def _pdf_bytes(title, headers, rows, timezone_name, brand_logo_bytes=None):
         logo.hAlign = "RIGHT"
         logo_cell = logo
     elif not brand_logo_bytes:
-        logo_cell = Paragraph(
-            "AMT",
-            ParagraphStyle(
-                "ExportLogoFallback",
-                parent=styles["Normal"],
-                fontSize=12,
-                textColor=colors.HexColor("#2563EB"),
-                alignment=2,
-            ),
-        )
+        logo_cell = ""
 
     # One header row keeps the title/generated block and AMT logo
     # vertically aligned. The data table begins immediately below it.
@@ -706,7 +986,8 @@ async def export_xlsx(
     dataset: str, q: str = "", status: str = "", placement: str = "", type: str = "",
     category: str = "", low: str = "", entity_type: str = "", sap_no: str = "", serial_no: str = "",
     technician: str = "", failure: str = "", client_id: str = "", job_id: str = "",
-    date_from: str = "", date_to: str = "", user: dict = Depends(get_current_user),
+    date_from: str = "", date_to: str = "", maintenance_ids: str = "",
+    user: dict = Depends(get_current_user),
 ):
     await require_feature_enabled(
         "export_data"
@@ -715,9 +996,19 @@ async def export_xlsx(
     params = _params(q=q, status=status, placement=placement, type=type, category=category, low=low,
                      entity_type=entity_type, sap_no=sap_no, serial_no=serial_no,
                      technician=technician, failure=failure, client_id=client_id,
-                     job_id=job_id, date_from=date_from, date_to=date_to)
+                     job_id=job_id, date_from=date_from, date_to=date_to,
+                     maintenance_ids=maintenance_ids)
     headers, rows = await _dataset(dataset, params, user)
-    data = _xlsx_bytes(dataset.title(), headers, rows)
+    brand_logo = (
+        await get_pdf_brand_logo_bytes()
+    )
+    data = _xlsx_bytes(
+        dataset.title(),
+        headers,
+        rows,
+        await _timezone_name(),
+        brand_logo,
+    )
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -730,7 +1021,8 @@ async def export_pdf(
     dataset: str, q: str = "", status: str = "", placement: str = "", type: str = "",
     category: str = "", low: str = "", entity_type: str = "", sap_no: str = "", serial_no: str = "",
     technician: str = "", failure: str = "", client_id: str = "", job_id: str = "",
-    date_from: str = "", date_to: str = "", user: dict = Depends(get_current_user),
+    date_from: str = "", date_to: str = "", maintenance_ids: str = "",
+    user: dict = Depends(get_current_user),
 ):
     await require_feature_enabled(
         "export_data"
@@ -739,7 +1031,8 @@ async def export_pdf(
     params = _params(q=q, status=status, placement=placement, type=type, category=category, low=low,
                      entity_type=entity_type, sap_no=sap_no, serial_no=serial_no,
                      technician=technician, failure=failure, client_id=client_id,
-                     job_id=job_id, date_from=date_from, date_to=date_to)
+                     job_id=job_id, date_from=date_from, date_to=date_to,
+                     maintenance_ids=maintenance_ids)
     headers, rows = await _dataset(dataset, params, user)
     brand_logo = (
         await get_pdf_brand_logo_bytes()

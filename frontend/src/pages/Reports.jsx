@@ -42,6 +42,13 @@ export default function Reports() {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
 
+  const [
+    selectedIds,
+    setSelectedIds,
+  ] = useState(
+    new Set()
+  );
+
   useEffect(() => {
     api
       .get("/clients")
@@ -69,6 +76,9 @@ export default function Reports() {
 
     setRows(data.items);
     setTotal(data.total);
+    setSelectedIds(
+      new Set()
+    );
   };
 
   useEffect(() => {
@@ -76,12 +86,95 @@ export default function Reports() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const qs = () =>
-    new URLSearchParams(
-      Object.entries(f).filter(
-        ([, value]) => value
-      )
-    ).toString();
+  const exportQs =
+    (selectedOnly = false) => {
+      const params =
+        new URLSearchParams(
+          Object.entries(f).filter(
+            ([, value]) => value
+          )
+        );
+
+      if (
+        selectedOnly &&
+        selectedIds.size > 0
+      ) {
+        params.set(
+          "maintenance_ids",
+          Array.from(
+            selectedIds
+          ).join(",")
+        );
+      }
+
+      return params.toString();
+    };
+
+  const toggleOne =
+    (id) => {
+      setSelectedIds(
+        (current) => {
+          const next =
+            new Set(current);
+
+          if (next.has(id)) {
+            next.delete(id);
+          } else {
+            next.add(id);
+          }
+
+          return next;
+        }
+      );
+    };
+
+  const allVisibleSelected =
+    rows.length > 0 &&
+    rows.every(
+      (row) =>
+        selectedIds.has(
+          row.id
+        )
+    );
+
+  const toggleAllVisible =
+    () => {
+      setSelectedIds(
+        (current) => {
+          const next =
+            new Set(current);
+
+          if (allVisibleSelected) {
+            rows.forEach(
+              (row) =>
+                next.delete(
+                  row.id
+                )
+            );
+          } else {
+            rows.forEach(
+              (row) =>
+                next.add(
+                  row.id
+                )
+            );
+          }
+
+          return next;
+        }
+      );
+    };
+
+  const exportMaintenance =
+    (
+      extension,
+      selectedOnly = false
+    ) => {
+      window.open(
+        `${API}/export/maintenance.${extension}?${exportQs(selectedOnly)}`,
+        "_blank"
+      );
+    };
 
   return (
     <div>
@@ -92,9 +185,8 @@ export default function Reports() {
         <Btn
           variant="outline"
           onClick={() =>
-            window.open(
-              `${API}/export/maintenance.xlsx?${qs()}`,
-              "_blank"
+            exportMaintenance(
+              "xlsx"
             )
           }
         >
@@ -105,9 +197,8 @@ export default function Reports() {
         <Btn
           variant="outline"
           onClick={() =>
-            window.open(
-              `${API}/export/maintenance.pdf?${qs()}`,
-              "_blank"
+            exportMaintenance(
+              "pdf"
             )
           }
         >
@@ -275,17 +366,85 @@ export default function Reports() {
       </Panel>
 
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
-        <span>{total} record(s)</span>
+        <span>
+          {total} record(s)
+          {selectedIds.size > 0
+            ? ` · ${selectedIds.size} selected`
+            : ""}
+        </span>
         <span className="no-print text-xs text-slate-400">
-          Scroll inside the table to view more records.
+          Select maintenance rows to export only the records you need.
         </span>
       </div>
+
+      {selectedIds.size > 0 && (
+        <Panel className="mb-3 p-3 no-print">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-slate-700">
+              {selectedIds.size} maintenance record(s) selected
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Btn
+                variant="outline"
+                onClick={() =>
+                  setSelectedIds(
+                    new Set()
+                  )
+                }
+              >
+                Clear Selection
+              </Btn>
+
+              <Btn
+                variant="outline"
+                onClick={() =>
+                  exportMaintenance(
+                    "xlsx",
+                    true
+                  )
+                }
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Export Selected Excel
+              </Btn>
+
+              <Btn
+                variant="outline"
+                onClick={() =>
+                  exportMaintenance(
+                    "pdf",
+                    true
+                  )
+                }
+              >
+                <FileText className="h-4 w-4" />
+                Export Selected PDF
+              </Btn>
+            </div>
+          </div>
+        </Panel>
+      )}
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <div className="max-h-[60vh] overflow-auto">
           <table className="w-full min-w-[980px] text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 shadow-[0_1px_0_0_#e2e8f0]">
               <tr>
+                <th className="w-12 px-4 py-3 no-print">
+                  <input
+                    type="checkbox"
+                    checked={
+                      allVisibleSelected
+                    }
+                    onChange={
+                      toggleAllVisible
+                    }
+                    aria-label="Select all visible maintenance"
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                </th>
+
                 <th className="px-4 py-3">
                   Maint. No.
                 </th>
@@ -323,6 +482,24 @@ export default function Reports() {
                   key={maintenance.id}
                   className="hover:bg-slate-50"
                 >
+                  <td className="w-12 px-4 py-2.5 no-print">
+                    <input
+                      type="checkbox"
+                      checked={
+                        selectedIds.has(
+                          maintenance.id
+                        )
+                      }
+                      onChange={() =>
+                        toggleOne(
+                          maintenance.id
+                        )
+                      }
+                      aria-label={`Select ${maintenance.mnt_no}`}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                  </td>
+
                   <td
                     className="cursor-pointer px-4 py-2.5 font-mono text-blue-600"
                     onClick={() =>
