@@ -25,6 +25,7 @@ import {
 } from "@/lib/api";
 import {
   hasLicenseFeature,
+  isAdmin,
   isMasterAdmin,
   useAuth,
 } from "@/context/AuthContext";
@@ -131,12 +132,14 @@ export default function SettingsPage() {
       "export_code_db"
     );
 
-  const canCustomBrand =
-    masterAdmin &&
+  const brandingLicensed =
     hasLicenseFeature(
       capabilities,
       "custom_branding"
     );
+
+  const canCustomBrand =
+    isAdmin(user);
 
   useEffect(() => {
     api
@@ -327,6 +330,13 @@ export default function SettingsPage() {
     async (file) => {
       if (!file) return;
 
+      if (!brandingLicensed) {
+        toast.error(
+          "Custom branding requires an eligible AMT license"
+        );
+        return;
+      }
+
       setLogoBusy(true);
 
       try {
@@ -368,6 +378,13 @@ export default function SettingsPage() {
 
   const resetAppLogo =
     async () => {
+      if (!brandingLicensed) {
+        toast.error(
+          "Custom branding requires an eligible AMT license"
+        );
+        return;
+      }
+
       if (
         !window.confirm(
           "Reset the application logo to the original AMT logo?"
@@ -761,6 +778,9 @@ export default function SettingsPage() {
                   Application Branding
                   <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">
                     Pro
+                  </span>
+                  <span className="rounded bg-violet-700 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">
+                    Master Admin &amp; Admin
                   </span>
                 </div>
 

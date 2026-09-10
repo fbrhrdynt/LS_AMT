@@ -59,7 +59,7 @@ class TimezoneBody(BaseModel):
 async def upload_app_logo(
     file: UploadFile = File(...),
     user: dict = Depends(
-        MASTER_ADMIN
+        ADMIN
     ),
 ):
     await require_feature_enabled(
@@ -237,7 +237,7 @@ async def get_app_logo():
 @router.delete("/settings/app-logo")
 async def reset_app_logo(
     user: dict = Depends(
-        MASTER_ADMIN
+        ADMIN
     ),
 ):
     await require_feature_enabled(
@@ -305,7 +305,7 @@ async def reset_app_logo(
 async def upload_pdf_logo(
     file: UploadFile = File(...),
     user: dict = Depends(
-        MASTER_ADMIN
+        ADMIN
     ),
 ):
     await require_feature_enabled(
@@ -419,7 +419,7 @@ async def upload_pdf_logo(
 @router.get("/settings/pdf-logo")
 async def get_pdf_logo(
     user: dict = Depends(
-        MASTER_ADMIN
+        ADMIN
     ),
 ):
     await require_feature_enabled(
@@ -484,7 +484,7 @@ async def get_pdf_logo(
 @router.delete("/settings/pdf-logo")
 async def delete_pdf_logo(
     user: dict = Depends(
-        MASTER_ADMIN
+        ADMIN
     ),
 ):
     await require_feature_enabled(

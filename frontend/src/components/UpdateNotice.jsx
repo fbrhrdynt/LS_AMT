@@ -17,7 +17,6 @@ import {
   formatApiError,
 } from "@/lib/api";
 import {
-  hasLicenseFeature,
   isAdmin,
   useAuth,
 } from "@/context/AuthContext";
@@ -32,7 +31,6 @@ export function useUpdateCheck({
 } = {}) {
   const {
     user,
-    license,
   } = useAuth();
 
   const [update, setUpdate] =
@@ -43,11 +41,7 @@ export function useUpdateCheck({
     useState("");
 
   const allowed =
-    isAdmin(user) &&
-    hasLicenseFeature(
-      license,
-      "update_version"
-    );
+    isAdmin(user);
 
   const check =
     useCallback(async () => {
