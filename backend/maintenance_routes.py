@@ -31,6 +31,7 @@ router = APIRouter(prefix="/api")
 EDIT = require_roles("admin", "supervisor", "technician")
 MANAGE = require_roles("admin", "supervisor")
 FILE_ADMIN = require_roles("admin")
+FILE_ADMIN = require_roles("admin")
 
 SUPPLY_SOURCES = ("Ex-Stock", "Purchase", "Warehouse")
 
