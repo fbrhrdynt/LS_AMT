@@ -7,6 +7,24 @@
   },
   "versions": [
     {
+      "version": "1.1.10",
+      "status": "stable",
+      "title": "Document Cleanup & Master Force Delete",
+      "summary": "Added Admin/Master document deletion from Equipment Documents, prevented stale calibration documents after tool archival, and added Master Admin-only force deletion for maintenance records.",
+      "changes": [
+        "Admin and Master Admin can delete documents/files from Equipment > Documents.",
+        "Backend file deletion is restricted to Admin and Master Admin.",
+        "Deleting a calibration certificate file also cleans its linked calibration certificate metadata.",
+        "Archiving a calibration tool detaches its certificate history from the Equipment Documents index.",
+        "Maintenance document delete buttons are restricted to Admin and Master Admin while upload permissions remain unchanged.",
+        "Master Admin receives a dedicated Force Delete action for maintenance records.",
+        "Normal maintenance delete behavior remains unchanged for other authorized users.",
+        "Force Delete can remove Closed or ledger-backed maintenance records while preserving a concurrency safety lock.",
+        "Force Delete restores any still-deducted Ex-Stock quantity before removing the maintenance.",
+        "Force Delete removes linked failures, attachments, file records, and maintenance inventory ledger rows and records an audit event."
+      ]
+    },
+    {
       "version": "1.1.9",
       "status": "stable",
       "title": "Admin Custom Roles & Per-User Menu Access",

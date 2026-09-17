@@ -232,7 +232,20 @@ Custom `master_admin` profiles are intentionally not supported.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.9**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.10**.
+
+### 1.1.10 - Document Cleanup & Master Force Delete
+
+- **Admin** and **Master Admin** can delete documents/files from **Equipment > Documents**.
+- Backend file deletion is restricted to Admin and Master Admin.
+- Calibration certificate file deletion also cleans linked calibration certificate metadata.
+- Archiving a calibration tool detaches its certificate history from the Equipment Documents index.
+- Maintenance attachment delete controls are restricted to Admin and Master Admin; upload permissions are unchanged.
+- **Master Admin** has a dedicated **Force Delete** action for maintenance records.
+- Normal maintenance delete rules remain unchanged for other authorized users.
+- Force Delete can remove Closed or ledger-backed maintenance after restoring any still-deducted Ex-Stock quantity.
+- Force Delete removes linked failures, attachments, file records, and maintenance inventory ledger rows and writes an audit event.
+- Active lifecycle operations still block deletion to prevent concurrent stock corruption.
 
 ### 1.1.9 - Admin Custom Roles & Per-User Menu Access
 
