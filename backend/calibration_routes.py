@@ -812,6 +812,22 @@ async def archive_calibration_tool(
         },
     )
 
+    await db.files.update_many(
+        {
+            "calibration_tool_id": tool_record_id,
+            "source": "calibration",
+            "is_deleted": False,
+        },
+        {"$set": {"equipment_id": None, "equipment_sap_no": None, "equipment_name": None}},
+    )
+    await db.calibration_certificates.update_many(
+        {
+            "calibration_tool_id": tool_record_id,
+            "is_deleted": {"$ne": True},
+        },
+        {"$set": {"equipment_id": None, "equipment_sap_no": None, "equipment_name": None}},
+    )
+
     await audit_log(
         "calibration_tool",
         tool_record_id,

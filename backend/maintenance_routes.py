@@ -30,6 +30,7 @@ router = APIRouter(prefix="/api")
 
 EDIT = require_roles("admin", "supervisor", "technician")
 MANAGE = require_roles("admin", "supervisor")
+FILE_ADMIN = require_roles("admin")
 
 SUPPLY_SOURCES = ("Ex-Stock", "Purchase", "Warehouse")
 
@@ -642,28 +643,136 @@ async def reopen_maintenance(mid: str, user: dict = Depends(MANAGE)):
     return await db.maintenance.find_one({"id": mid}, {"_id": 0})
 
 
+async def _force_restore_maintenance_stock(maintenance: dict) -> list[dict]:
+    if not maintenance.get("parts_deducted"):
+        return []
+
+    pending = []
+    for index, part in enumerate(maintenance.get("parts_consumed") or []):
+        if not _part_uses_inventory(part):
+            continue
+        qty = float(part.get("qty") or 0)
+        if qty <= 0:
+            continue
+        item_id = part.get("item_id")
+        item = await db.inventory_items.find_one({"id": item_id})
+        if not item:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Cannot force delete because an Ex-Stock inventory item is missing: "
+                    f"{part.get('item_name') or item_id}"
+                ),
+            )
+        pending.append((index, part, item))
+
+    restored = []
+    for index, part, item in pending:
+        qty = float(part.get("qty") or 0)
+        stock = await _stock_mutation(
+            item["id"], qty, f"force-delete:{maintenance['id']}:{index}", True
+        )
+        restored.append({
+            "item_id": item["id"],
+            "item_name": item.get("item_name"),
+            "qty": qty,
+            "stock_before": stock["before"],
+            "stock_after": stock["after"],
+        })
+    return restored
+
+
 @router.delete("/maintenance/{mid}")
-async def delete_maintenance(mid: str, user: dict = Depends(MANAGE)):
+async def delete_maintenance(
+    mid: str,
+    force: bool = Query(False),
+    user: dict = Depends(MANAGE),
+):
     m = await db.maintenance.find_one({"id": mid})
     if not m:
         raise HTTPException(status_code=404, detail="Maintenance not found")
+
+    if force and user.get("role") != "master_admin":
+        raise HTTPException(status_code=403, detail="Force Delete is restricted to Master Admin")
+
     if m.get("lifecycle_lock"):
-        raise HTTPException(status_code=409, detail="Maintenance lifecycle operation is in progress")
-    if m.get("status") == "Closed":
-        raise HTTPException(status_code=400, detail="Closed maintenance cannot be hard-deleted. Reopen it first.")
-    if await db.inventory_transactions.count_documents({"maintenance_id": mid}):
         raise HTTPException(
-            status_code=400,
-            detail="Maintenance has inventory ledger history and cannot be hard-deleted. Retain the reopened record for auditability.",
+            status_code=409,
+            detail="Maintenance lifecycle operation is in progress. Wait for it to finish before deleting.",
         )
-    result = await db.maintenance.delete_one(
-        {"id": mid, "status": "Open", "$or": [
-            {"lifecycle_lock": {"$exists": False}}, {"lifecycle_lock": None}
-        ]}
-    )
+
+    restored_stock = []
+    ledger_count = 0
+    force_lock_id = None
+
+    if force:
+        force_lock_id = new_id()
+        locked = await db.maintenance.find_one_and_update(
+            {
+                "id": mid,
+                "$or": [
+                    {"lifecycle_lock": {"$exists": False}},
+                    {"lifecycle_lock": None},
+                ],
+            },
+            {
+                "$set": {
+                    "lifecycle_lock": {
+                        "action": "force_delete",
+                        "lease_id": force_lock_id,
+                        "at": now_iso(),
+                    }
+                }
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+        if not locked:
+            raise HTTPException(status_code=409, detail="Maintenance changed concurrently")
+        m = locked
+        try:
+            restored_stock = await _force_restore_maintenance_stock(m)
+            ledger_count = await db.inventory_transactions.count_documents({"maintenance_id": mid})
+        except Exception:
+            await db.maintenance.update_one(
+                {"id": mid, "lifecycle_lock.lease_id": force_lock_id},
+                {"$unset": {"lifecycle_lock": ""}},
+            )
+            raise
+        delete_query = {"id": mid, "lifecycle_lock.lease_id": force_lock_id}
+    else:
+        if m.get("status") == "Closed":
+            raise HTTPException(
+                status_code=400,
+                detail="Closed maintenance cannot be hard-deleted. Reopen it first.",
+            )
+        if await db.inventory_transactions.count_documents({"maintenance_id": mid}):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Maintenance has inventory ledger history and cannot be hard-deleted. "
+                    "Retain the reopened record for auditability."
+                ),
+            )
+        delete_query = {
+            "id": mid,
+            "status": "Open",
+            "$or": [
+                {"lifecycle_lock": {"$exists": False}},
+                {"lifecycle_lock": None},
+            ],
+        }
+
+    result = await db.maintenance.delete_one(delete_query)
     if result.deleted_count != 1:
+        if force and force_lock_id:
+            await db.maintenance.update_one(
+                {"id": mid, "lifecycle_lock.lease_id": force_lock_id},
+                {"$unset": {"lifecycle_lock": ""}},
+            )
         raise HTTPException(status_code=409, detail="Maintenance changed concurrently")
+
     await db.failures.delete_many({"maintenance_id": mid})
+
     related_files = await db.files.find(
         {"maintenance_id": mid, "is_deleted": False}
     ).to_list(5000)
@@ -672,13 +781,45 @@ async def delete_maintenance(mid: str, user: dict = Depends(MANAGE)):
             delete_object(file_rec["storage_path"])
         except Exception:
             pass
+
     await db.files.update_many(
         {"maintenance_id": mid},
         {"$set": {"is_deleted": True, "deleted_at": now_iso(), "deleted_by": user["name"]}},
     )
+
+    if force:
+        await db.inventory_transactions.delete_many({"maintenance_id": mid})
+
     await _sync_equipment_status(m["equipment_id"])
-    await audit_log("maintenance", mid, "maintenance.delete", user, f"Deleted open maintenance {m['mnt_no']}")
-    return {"ok": True}
+
+    if force:
+        await audit_log(
+            "maintenance",
+            mid,
+            "maintenance.force_delete",
+            user,
+            (
+                f"Force deleted {m['mnt_no']} "
+                f"(ledger rows removed={ledger_count}, stock items restored={len(restored_stock)})"
+            ),
+            extra={
+                "force": True,
+                "previous_status": m.get("status"),
+                "ledger_rows_removed": ledger_count,
+                "restored_stock": restored_stock,
+            },
+        )
+    else:
+        await audit_log(
+            "maintenance", mid, "maintenance.delete", user, f"Deleted open maintenance {m['mnt_no']}"
+        )
+
+    return {
+        "ok": True,
+        "force": force,
+        "ledger_rows_removed": ledger_count if force else 0,
+        "stock_items_restored": len(restored_stock) if force else 0,
+    }
 
 
 async def _equipment_current_location(eq: dict) -> str:
@@ -923,26 +1064,55 @@ async def download_file(
 
 
 @router.delete("/files/{file_id}")
-async def delete_file(file_id: str, user: dict = Depends(EDIT)):
+async def delete_file(file_id: str, user: dict = Depends(FILE_ADMIN)):
     rec = await db.files.find_one({"id": file_id, "is_deleted": False})
     if not rec:
         raise HTTPException(status_code=404, detail="File not found")
 
+    deleted_at = now_iso()
     await db.files.update_one(
         {"id": file_id, "is_deleted": False},
-        {
-            "$set": {
-                "is_deleted": True,
-                "deleted_at": now_iso(),
-                "deleted_by": user["name"],
-            }
-        },
+        {"$set": {"is_deleted": True, "deleted_at": deleted_at, "deleted_by": user["name"]}},
     )
+
     if rec.get("maintenance_id"):
         await db.maintenance.update_one(
             {"id": rec["maintenance_id"]},
             {"$pull": {"attachments": file_id}},
         )
+
+    if rec.get("source") == "calibration":
+        cert_id = rec.get("calibration_certificate_id")
+        query = {"file_id": file_id}
+        if cert_id:
+            query = {"$or": [{"id": cert_id}, {"file_id": file_id}]}
+        await db.calibration_certificates.update_many(
+            query,
+            {"$set": {"is_deleted": True, "deleted_at": deleted_at, "deleted_by": user["name"]}},
+        )
+
+        tool_id = rec.get("calibration_tool_id")
+        if tool_id:
+            latest = (
+                await db.calibration_certificates.find(
+                    {"calibration_tool_id": tool_id, "is_deleted": {"$ne": True}},
+                    {"_id": 0},
+                )
+                .sort("created_at", -1)
+                .limit(1)
+                .to_list(1)
+            )
+            if latest:
+                await db.calibration_tools.update_one(
+                    {"id": tool_id},
+                    {"$set": {"latest_certificate_id": latest[0]["id"], "updated_at": deleted_at}},
+                )
+            else:
+                await db.calibration_tools.update_one(
+                    {"id": tool_id},
+                    {"$unset": {"latest_certificate_id": ""}, "$set": {"updated_at": deleted_at}},
+                )
+
     try:
         delete_object(rec["storage_path"])
     except Exception:
@@ -954,5 +1124,10 @@ async def delete_file(file_id: str, user: dict = Depends(EDIT)):
         "file.delete",
         user,
         rec.get("original_filename") or "Document",
+        extra={
+            "source": rec.get("source"),
+            "maintenance_id": rec.get("maintenance_id"),
+            "calibration_tool_id": rec.get("calibration_tool_id"),
+        },
     )
     return {"ok": True}

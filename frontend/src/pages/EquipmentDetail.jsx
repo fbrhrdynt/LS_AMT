@@ -24,6 +24,8 @@ import {
   useAuth,
   canEdit,
   canManage,
+  isAdmin,
+  isMasterAdmin,
 } from "@/context/AuthContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import {
@@ -63,8 +65,10 @@ function MntCard({
   onReopen,
   onEdit,
   onDelete,
+  onForceDelete,
   canEditUser,
   canManageUser,
+  canForceDeleteUser,
 }) {
   const { format } = useCurrency();
 
@@ -161,8 +165,22 @@ function MntCard({
               onClick={() => onDelete(m)}
               className="py-1.5 text-xs"
               data-testid={`delete-mnt-${m.id}`}
+              title="Delete using normal maintenance rules"
             >
               <Trash2 className="h-3.5 w-3.5" />
+            </Btn>
+          )}
+
+          {canForceDeleteUser && (
+            <Btn
+              variant="danger"
+              onClick={() => onForceDelete(m)}
+              className="py-1.5 text-xs"
+              data-testid={`force-delete-mnt-${m.id}`}
+              title="Master Admin Force Delete"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Force Delete
             </Btn>
           )}
         </div>
@@ -431,6 +449,52 @@ export default function EquipmentDetail() {
       toast.error(
         formatApiError(e.response?.data?.detail)
       );
+    }
+  };
+
+  const forceDelMnt = async (m) => {
+    if (
+      !window.confirm(
+        `FORCE DELETE ${m.mnt_no}?\n\n` +
+          "Master Admin only. This permanently removes the maintenance, failures, attachments, and inventory ledger rows. Any still-deducted Ex-Stock quantity will be restored."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const { data: result } = await api.delete(
+        `/maintenance/${m.id}?force=true`
+      );
+      toast.success(
+        `Maintenance force deleted${
+          result?.stock_items_restored
+            ? ` · ${result.stock_items_restored} stock item(s) restored`
+            : ""
+        }`
+      );
+      load();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail));
+    }
+  };
+
+  const deleteDocument = async (file) => {
+    if (!isAdmin(user)) return;
+    if (
+      !window.confirm(
+        `Delete document "${file.original_filename}"? The stored file will also be removed.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await api.delete(`/files/${file.id}`);
+      toast.success("Document deleted");
+      await load();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail));
     }
   };
 
@@ -776,12 +840,14 @@ export default function EquipmentDetail() {
                   onDocumentsChanged={load}
                   canEditUser={canEdit(user)}
                   canManageUser={canManage(user)}
+                  canForceDeleteUser={isMasterAdmin(user)}
                   onClose={(mm) => {
                     setCloseTarget(mm);
                   }}
                   onReopen={reopen}
                   onEdit={(mm) => setEditTarget(mm)}
                   onDelete={delMnt}
+                  onForceDelete={forceDelMnt}
                 />
               ))
             ) : (
@@ -993,6 +1059,11 @@ export default function EquipmentDetail() {
                     <th className="px-4 py-3">
                       File
                     </th>
+                    {isAdmin(user) && (
+                      <th className="px-4 py-3 text-right">
+                        Action
+                      </th>
+                    )}
                   </tr>
                 </thead>
 
@@ -1046,6 +1117,21 @@ export default function EquipmentDetail() {
                             <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                           </a>
                         </td>
+
+                        {isAdmin(user) && (
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => deleteDocument(file)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-600"
+                              title="Delete document"
+                              aria-label={`Delete ${file.original_filename}`}
+                              data-testid={`delete-doc-${file.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}

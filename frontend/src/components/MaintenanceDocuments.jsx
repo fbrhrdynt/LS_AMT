@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import { api, API, formatApiError } from "@/lib/api";
 import { Btn, SelectInput } from "@/components/Bits";
+import { isAdmin, useAuth } from "@/context/AuthContext";
 
 
 const DOCUMENT_TYPES = [
@@ -45,6 +46,8 @@ export default function MaintenanceDocuments({
   canEditUser = false,
   onChanged,
 }) {
+  const { user } = useAuth();
+  const canDeleteUser = isAdmin(user);
   const fileRef = useRef(null);
   const [docType, setDocType] = useState("Before Photo");
   const [uploading, setUploading] = useState(false);
@@ -190,7 +193,7 @@ export default function MaintenanceDocuments({
                 <ExternalLink className="h-4 w-4" />
               </a>
 
-              {canEditUser && (
+              {canDeleteUser && (
                 <button
                   type="button"
                   onClick={() => remove(file)}
