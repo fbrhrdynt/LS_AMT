@@ -17,8 +17,10 @@ import {
   Btn,
   TextInput,
   SelectInput,
+  Panel,
 } from "@/components/Bits";
 import DataTable from "@/components/DataTable";
+import ExportButtons from "@/components/ExportButtons";
 import {
   Dialog,
   DialogContent,
@@ -63,6 +65,11 @@ export default function Inventory() {
   const [sortBy, setSortBy] = useState("category_asc");
   const [low, setLow] = useState(sp.get("low") === "1");
 
+  const [exportCategory, setExportCategory] = useState("");
+  const [exportType, setExportType] = useState("");
+  const [exportStockStatus, setExportStockStatus] = useState("");
+  const [exportLocation, setExportLocation] = useState("");
+
   const [dialog, setDialog] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(empty);
@@ -72,6 +79,34 @@ export default function Inventory() {
   const [adjNote, setAdjNote] = useState("");
 
   const reqRef = useRef(0);
+
+  const exportQuery = (() => {
+    const params = new URLSearchParams();
+
+    if (exportCategory) params.set("category", exportCategory);
+    if (exportType) params.set("type", exportType);
+    if (exportStockStatus) {
+      params.set("stock_status", exportStockStatus);
+    }
+    if (exportLocation.trim()) {
+      params.set("storage_location", exportLocation.trim());
+    }
+
+    return params.toString();
+  })();
+
+  const useCurrentListFilters = () => {
+    setExportCategory(category);
+    setExportType(type);
+    setExportStockStatus(low ? "low" : "");
+  };
+
+  const resetExportFilters = () => {
+    setExportCategory("");
+    setExportType("");
+    setExportStockStatus("");
+    setExportLocation("");
+  };
 
   const loadCategories = useCallback(async () => {
     try {
@@ -217,6 +252,7 @@ export default function Inventory() {
       <PageHeader
         title="Inventory"
         subtitle={`${items.length} inventory items`}
+        hideExport
       >
         {canManage(user) && (
           <Btn
@@ -228,6 +264,106 @@ export default function Inventory() {
           </Btn>
         )}
       </PageHeader>
+
+      <Panel
+        title="Inventory Export"
+        className="mb-5"
+      >
+        <div className="p-4">
+          <p className="mb-4 text-xs leading-5 text-slate-500">
+            Export all inventory or build a focused Excel/PDF report by category,
+            type, stock condition, or storage location.
+          </p>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <SelectInput
+              label="Category"
+              value={exportCategory}
+              onChange={(event) =>
+                setExportCategory(event.target.value)
+              }
+              data-testid="inventory-export-category"
+            >
+              <option value="">All Categories</option>
+              {categories.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </SelectInput>
+
+            <SelectInput
+              label="Type"
+              value={exportType}
+              onChange={(event) =>
+                setExportType(event.target.value)
+              }
+              data-testid="inventory-export-type"
+            >
+              <option value="">All Types</option>
+              {TYPES.map((value) => (
+                <option key={value}>{value}</option>
+              ))}
+            </SelectInput>
+
+            <SelectInput
+              label="Stock Status"
+              value={exportStockStatus}
+              onChange={(event) =>
+                setExportStockStatus(event.target.value)
+              }
+              data-testid="inventory-export-stock-status"
+            >
+              <option value="">All Stock Status</option>
+              <option value="low">
+                Low Stock / At Minimum
+              </option>
+              <option value="out">
+                Out of Stock
+              </option>
+              <option value="healthy">
+                Healthy / Above Minimum
+              </option>
+            </SelectInput>
+
+            <TextInput
+              label="Storage Location Contains"
+              value={exportLocation}
+              placeholder="e.g. Rack A"
+              onChange={(event) =>
+                setExportLocation(event.target.value)
+              }
+              data-testid="inventory-export-location"
+            />
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <ExportButtons
+              dataset="inventory"
+              query={exportQuery}
+            />
+
+            <Btn
+              variant="outline"
+              onClick={useCurrentListFilters}
+            >
+              Use Current List Filters
+            </Btn>
+
+            <Btn
+              variant="ghost"
+              onClick={resetExportFilters}
+            >
+              Reset Export Filters
+            </Btn>
+          </div>
+
+          <div className="mt-3 text-[11px] leading-4 text-slate-400">
+            Export includes Category, Stock Status, Reorder Gap, Unit Price,
+            and calculated Stock Value.
+          </div>
+        </div>
+      </Panel>
 
       <DataTable
         data={items}

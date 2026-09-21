@@ -360,22 +360,99 @@ async def _inventory_rows(params):
     q = params.get("q", "")
     if q:
         query["$or"] = [
-            {"item_code": _rx(q)}, {"item_name": _rx(q)},
-            {"part_number": _rx(q)}, {"storage_location": _rx(q)},
+            {"item_code": _rx(q)},
+            {"item_name": _rx(q)},
+            {"category": _rx(q)},
+            {"part_number": _rx(q)},
+            {"storage_location": _rx(q)},
         ]
+
     if params.get("type"):
         query["type"] = params["type"]
-    if params.get("low") in ("1", "true", "True"):
-        query["$expr"] = {"$lte": ["$stock", "$min_stock"]}
-    records = await db.inventory_items.find(query, {"_id": 0}).sort("item_code", 1).to_list(100000)
+
+    if params.get("category"):
+        query["category"] = params["category"]
+
+    if params.get("storage_location"):
+        query["storage_location"] = _rx(
+            params["storage_location"]
+        )
+
+    stock_status = str(
+        params.get("stock_status") or ""
+    ).strip().lower()
+
+    if stock_status == "out":
+        query["stock"] = {"$lte": 0}
+    elif stock_status == "healthy":
+        query["$expr"] = {
+            "$gt": ["$stock", "$min_stock"]
+        }
+    elif (
+        stock_status == "low"
+        or params.get("low") in ("1", "true", "True")
+    ):
+        query["$expr"] = {
+            "$lte": ["$stock", "$min_stock"]
+        }
+
+    records = await db.inventory_items.find(
+        query,
+        {"_id": 0},
+    ).sort(
+        [
+            ("category", 1),
+            ("item_code", 1),
+        ]
+    ).to_list(100000)
+
+    rows = []
+    for item in records:
+        stock = float(item.get("stock") or 0)
+        minimum = float(item.get("min_stock") or 0)
+        price = float(item.get("unit_price") or 0)
+
+        if stock <= 0:
+            status = "Out of Stock"
+        elif stock <= minimum:
+            status = "Low Stock"
+        else:
+            status = "Healthy"
+
+        reorder_gap = max(minimum - stock, 0)
+        stock_value = round(stock * price, 2)
+
+        rows.append([
+            item.get("item_code"),
+            item.get("item_name"),
+            item.get("category"),
+            item.get("type"),
+            item.get("part_number"),
+            item.get("unit"),
+            stock,
+            minimum,
+            status,
+            reorder_gap,
+            item.get("storage_location"),
+            price,
+            stock_value,
+        ])
+
     return [
-        "Item Code", "Item Name", "Type", "Part Number", "Unit", "Stock",
-        "Minimum Stock", "Storage Location", "Unit Price",
-    ], [[
-        r.get("item_code"), r.get("item_name"), r.get("type"), r.get("part_number"),
-        r.get("unit"), r.get("stock"), r.get("min_stock"), r.get("storage_location"),
-        r.get("unit_price"),
-    ] for r in records]
+        "Item Code",
+        "Item Name",
+        "Category",
+        "Type",
+        "Part Number",
+        "Unit",
+        "Stock",
+        "Minimum Stock",
+        "Stock Status",
+        "Reorder Gap",
+        "Storage Location",
+        "Unit Price",
+        "Stock Value",
+    ], rows
 
 
 async def _client_rows(params):
@@ -984,7 +1061,8 @@ def _params(**kwargs):
 @router.get("/export/{dataset}.xlsx")
 async def export_xlsx(
     dataset: str, q: str = "", status: str = "", placement: str = "", type: str = "",
-    category: str = "", low: str = "", entity_type: str = "", sap_no: str = "", serial_no: str = "",
+    category: str = "", low: str = "", stock_status: str = "", storage_location: str = "",
+    entity_type: str = "", sap_no: str = "", serial_no: str = "",
     technician: str = "", failure: str = "", client_id: str = "", job_id: str = "",
     date_from: str = "", date_to: str = "", maintenance_ids: str = "",
     user: dict = Depends(get_current_user),
@@ -994,6 +1072,7 @@ async def export_xlsx(
     )
 
     params = _params(q=q, status=status, placement=placement, type=type, category=category, low=low,
+                     stock_status=stock_status, storage_location=storage_location,
                      entity_type=entity_type, sap_no=sap_no, serial_no=serial_no,
                      technician=technician, failure=failure, client_id=client_id,
                      job_id=job_id, date_from=date_from, date_to=date_to,
@@ -1019,7 +1098,8 @@ async def export_xlsx(
 @router.get("/export/{dataset}.pdf")
 async def export_pdf(
     dataset: str, q: str = "", status: str = "", placement: str = "", type: str = "",
-    category: str = "", low: str = "", entity_type: str = "", sap_no: str = "", serial_no: str = "",
+    category: str = "", low: str = "", stock_status: str = "", storage_location: str = "",
+    entity_type: str = "", sap_no: str = "", serial_no: str = "",
     technician: str = "", failure: str = "", client_id: str = "", job_id: str = "",
     date_from: str = "", date_to: str = "", maintenance_ids: str = "",
     user: dict = Depends(get_current_user),
@@ -1029,6 +1109,7 @@ async def export_pdf(
     )
 
     params = _params(q=q, status=status, placement=placement, type=type, category=category, low=low,
+                     stock_status=stock_status, storage_location=storage_location,
                      entity_type=entity_type, sap_no=sap_no, serial_no=serial_no,
                      technician=technician, failure=failure, client_id=client_id,
                      job_id=job_id, date_from=date_from, date_to=date_to,

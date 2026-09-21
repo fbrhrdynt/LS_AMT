@@ -150,6 +150,10 @@ Administrators / supervisors can **Reset Public Link** to invalidate an existing
 - Inventory transaction history
 - Maintenance-linked consumption
 - Reversal handling when maintenance is reopened or deleted
+- Dedicated Inventory Export Center
+- Excel / PDF export by category, type, stock status, and storage location
+- Low-stock, out-of-stock, and healthy-stock reporting
+- Exported stock status, reorder gap, and calculated stock value
 
 ### Jobs & Clients
 
@@ -232,7 +236,24 @@ Custom `master_admin` profiles are intentionally not supported.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.10**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.11**.
+
+### 1.1.11 - Inventory Export Center & Guided Excel Imports
+
+- Added one dedicated **Inventory Export Center** and removed the duplicate Inventory export controls under the page title.
+- Inventory Excel/PDF exports can be filtered by **Category**, **Type**, **Stock Status**, and **Storage Location**.
+- Stock-status presets include **Low Stock**, **Out of Stock**, and **Healthy / Above Minimum**.
+- Inventory exports include **Category**, **Stock Status**, **Reorder Gap**, **Unit Price**, and calculated **Stock Value**.
+- Current Inventory list filters can be copied into the Export Center.
+- Excel Import now provides downloadable AMT templates for **Equipment**, **Calibration**, and **Inventory**.
+- Templates include example data, instructions, required-field guidance, and supported dropdown validation.
+- Import validation shows total, new, duplicate, and invalid rows before import.
+- Calibration import detects missing **Assigned SAP** references.
+- For each missing SAP, AMT asks whether the user wants to create the Equipment automatically.
+- Automatically created Equipment is registered at **Base** and linked to the imported Calibration Tool.
+- Missing-SAP Calibration rows may also be skipped intentionally.
+- Inventory imports with initial stock create the corresponding initial-stock transaction history.
+- Existing legacy backend Equipment/Maintenance import compatibility is retained.
 
 ### 1.1.10 - Document Cleanup & Master Force Delete
 
@@ -740,15 +761,29 @@ Before exposing AMT to the internet:
 
 ## Importing Existing Data
 
-AMT includes an Excel import workflow for equipment and maintenance records.
+AMT provides guided Excel import templates from **Excel Import**.
 
-The importer supports:
+User-facing templates are available for:
 
-- Equipment register data
-- Maintenance history
-- Duplicate detection
-- Existing SAP-number matching
-- Automatic maintenance numbering
+- Equipment
+- Calibration
+- Inventory
+
+The workflow is:
+
+1. Choose the data type.
+2. Download the AMT Excel template.
+3. Fill the template without changing its header names.
+4. Upload the completed `.xlsx` file.
+5. Validate and preview new, duplicate, and invalid rows.
+6. Resolve missing Equipment SAP references for Calibration imports.
+7. Run the import and review the result counts.
+
+For Calibration imports, if an **Assigned SAP** does not exist in Equipment, AMT asks whether that Equipment should be created automatically. Automatically created Equipment starts at **Base** and is linked to the imported Calibration Tool. The user can also choose to skip that Calibration row.
+
+Inventory imports preserve initial stock by creating an initial inventory transaction when the imported stock is greater than zero.
+
+The backend retains compatibility with the historical Equipment/Maintenance workbook importer for existing integrations, but the current user-facing Import page focuses on the three AMT templates above.
 
 Import production data only after verifying workbook structure and taking a database backup.
 

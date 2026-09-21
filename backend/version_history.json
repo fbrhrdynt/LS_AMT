@@ -7,6 +7,29 @@
   },
   "versions": [
     {
+      "version": "1.1.11",
+      "status": "stable",
+      "title": "Inventory Export Center & Guided Excel Imports",
+      "summary": "Added a filterable Inventory Export Center for Excel/PDF reports and template-driven Equipment, Calibration, and Inventory imports with guided missing-equipment creation for Calibration assignments.",
+      "changes": [
+        "Inventory now has one dedicated Export Center instead of duplicate export controls under the page title.",
+        "All authenticated users with Inventory access and export capability can export Inventory data to Excel or PDF.",
+        "Inventory exports can be filtered by Category, Type, Stock Status, and Storage Location.",
+        "Inventory export presets support all stock, low stock, out of stock, and healthy stock reporting.",
+        "Inventory exports include Category, Stock Status, Reorder Gap, Unit Price, and calculated Stock Value.",
+        "The existing Inventory list filters can be copied directly into the Export Center.",
+        "Excel Import now provides downloadable AMT templates for Equipment, Calibration, and Inventory.",
+        "Templates contain example data, instructions, required-field guidance, and dropdown validation for supported categorical fields.",
+        "Import validation reports total, new, duplicate, and invalid rows before execution.",
+        "Calibration import detects Assigned SAP numbers that do not exist in Equipment.",
+        "For each missing Calibration SAP, AMT asks whether the Equipment should be created automatically.",
+        "Automatically created Equipment is registered at Base and linked to the imported Calibration Tool.",
+        "Calibration rows with missing SAP can also be skipped intentionally.",
+        "Inventory import creates initial-stock transaction history when imported stock is greater than zero.",
+        "Legacy backend Equipment/Maintenance import compatibility remains available for existing integrations."
+      ]
+    },
+    {
       "version": "1.1.10",
       "status": "stable",
       "title": "Document Cleanup & Master Force Delete",

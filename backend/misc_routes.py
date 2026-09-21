@@ -9,6 +9,13 @@ import openpyxl
 from core import db, audit_log
 from auth import get_current_user, require_roles
 from importer import parse_workbook, _insert_equipment, _insert_maintenance
+from import_templates import (
+    SUPPORTED_IMPORT_DATASETS,
+    analyze_import_rows,
+    build_import_template,
+    execute_import_rows,
+    parse_import_template,
+)
 from storage import IMPORT_MAX_SIZE, read_upload_limited, validate_workbook_archive
 from license_service import require_feature_enabled
 
@@ -336,12 +343,74 @@ async def _read_workbook(file: UploadFile) -> bytes:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@router.get("/import/template/{dataset}.xlsx")
+async def import_template(
+    dataset: str,
+    user: dict = Depends(MANAGE),
+):
+    normalized = str(dataset or "").strip().lower()
+    if normalized not in SUPPORTED_IMPORT_DATASETS:
+        raise HTTPException(
+            status_code=404,
+            detail="Import template not found",
+        )
+
+    try:
+        data = build_import_template(normalized)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    return Response(
+        content=data,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+        headers={
+            **NO_STORE_HEADERS,
+            "Content-Disposition": (
+                f'attachment; filename="amt-{normalized}-import-template.xlsx"'
+            ),
+        },
+    )
+
+
 @router.post("/import/analyze")
 async def import_analyze(
     file: UploadFile = File(...),
+    dataset: str = Query("legacy"),
     user: dict = Depends(MANAGE),
 ):
     data = await _read_workbook(file)
+    normalized = str(dataset or "legacy").strip().lower()
+
+    if normalized in SUPPORTED_IMPORT_DATASETS:
+        try:
+            parsed = parse_import_template(
+                io.BytesIO(data),
+                normalized,
+            )
+            return await analyze_import_rows(parsed)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=str(exc),
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not parse file: {exc}",
+            )
+
+    if normalized != "legacy":
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported import dataset",
+        )
+
     try:
         equipment_rows, maintenance_rows = parse_workbook(io.BytesIO(data))
     except Exception as exc:
@@ -382,9 +451,44 @@ async def import_analyze(
 async def import_execute(
     file: UploadFile = File(...),
     skip_duplicates: bool = Query(True),
+    dataset: str = Query("legacy"),
+    create_missing_saps: str = Query(""),
     user: dict = Depends(MANAGE),
 ):
     data = await _read_workbook(file)
+    normalized = str(dataset or "legacy").strip().lower()
+
+    if normalized in SUPPORTED_IMPORT_DATASETS:
+        try:
+            parsed = parse_import_template(
+                io.BytesIO(data),
+                normalized,
+            )
+            wanted_saps = {
+                value.strip()
+                for value in str(
+                    create_missing_saps or ""
+                ).split(",")
+                if value.strip()
+            }
+            return await execute_import_rows(
+                parsed,
+                user,
+                skip_duplicates=skip_duplicates,
+                create_missing_saps=wanted_saps,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=str(exc),
+            )
+
+    if normalized != "legacy":
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported import dataset",
+        )
+
     try:
         equipment_rows, maintenance_rows = parse_workbook(io.BytesIO(data))
     except Exception as exc:
