@@ -241,7 +241,16 @@ Custom `master_admin` profiles are intentionally not supported.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.13**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.14**.
+
+### 1.1.14 - Public Inventory UX & PDF Metadata Fixes
+
+- Fixed automatic **Item not found** when opening Inventory.
+- Existing Inventory QR/Public Link remains recognized after refresh.
+- Added **View QR / Public Link** for existing QR links.
+- Simplified Public Inventory and cabinet QR text.
+- Added proper PDF Title, Author, and Subject metadata.
+- Generated PDF reports no longer show `(anonymous)`.
 
 ### 1.1.13 - Public Inventory UX & PDF Metadata Fixes
 
