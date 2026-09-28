@@ -7,6 +7,27 @@
   },
   "versions": [
     {
+      "version": "1.1.12",
+      "status": "stable",
+      "title": "Secure Public Inventory QR",
+      "summary": "Added Admin-managed QR/Public Link access for a read-only physical-cabinet Inventory view with filtering and public Excel/PDF exports.",
+      "changes": [
+        "Master Admin and Admin can generate, copy, open, disable, enable, reset, and download a printable QR label for the Inventory public view.",
+        "The Inventory QR/Public Link management section is hidden from Supervisor, Technician, Viewer, and public users.",
+        "Public Inventory links use a high-entropy token identifier plus HMAC signature and do not expose a reusable secret from the database.",
+        "Resetting the public link immediately revokes previously printed or shared QR links.",
+        "Disabling the public link immediately blocks public Inventory viewing and public exports without deleting Inventory data.",
+        "The public Inventory page is strictly read-only and has no add, edit, stock-adjustment, delete, user-management, or authenticated application controls.",
+        "Public users can search and filter by Category, Type, Stock Status, and Storage Location and can sort the visible Inventory list.",
+        "Public users can export the same filtered operational Inventory view to branded Excel or PDF reports.",
+        "Public output intentionally excludes internal database IDs, user data, inventory transaction history, and unit pricing.",
+        "Public Inventory endpoints include no-store, no-index, no-referrer headers and lightweight request throttling.",
+        "Public query values are length-limited and regex escaped before MongoDB filtering.",
+        "Public exports are generated server-side from an allowlisted field set and do not reuse authenticated Inventory mutation endpoints.",
+        "Administrative public-link lifecycle actions are written to the AMT Audit Trail."
+      ]
+    },
+    {
       "version": "1.1.11",
       "status": "stable",
       "title": "Inventory Export Center & Guided Excel Imports",

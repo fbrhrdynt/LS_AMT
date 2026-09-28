@@ -10,7 +10,11 @@ import {
 import { toast } from "sonner";
 
 import { api, formatApiError } from "@/lib/api";
-import { useAuth, canManage } from "@/context/AuthContext";
+import {
+  useAuth,
+  canManage,
+  isAdmin,
+} from "@/context/AuthContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import {
   PageHeader,
@@ -21,6 +25,7 @@ import {
 } from "@/components/Bits";
 import DataTable from "@/components/DataTable";
 import ExportButtons from "@/components/ExportButtons";
+import InventoryPublicAccess from "@/components/InventoryPublicAccess";
 import {
   Dialog,
   DialogContent,
@@ -264,6 +269,10 @@ export default function Inventory() {
           </Btn>
         )}
       </PageHeader>
+
+      {isAdmin(user) && (
+        <InventoryPublicAccess />
+      )}
 
       <Panel
         title="Inventory Export"

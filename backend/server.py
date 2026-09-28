@@ -17,6 +17,7 @@ from jobs_routes import router as jobs_router
 from misc_routes import router as misc_router
 from admin_routes import router as admin_router
 from public_routes import router as public_router
+from public_inventory_routes import router as public_inventory_router
 from settings_routes import router as settings_router
 from export_routes import router as export_router
 from license_routes import router as license_router
@@ -128,6 +129,7 @@ app.include_router(jobs_router)
 app.include_router(misc_router)
 app.include_router(admin_router)
 app.include_router(public_router)
+app.include_router(public_inventory_router)
 app.include_router(settings_router)
 app.include_router(export_router)
 app.include_router(license_router)

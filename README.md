@@ -154,6 +154,11 @@ Administrators / supervisors can **Reset Public Link** to invalidate an existing
 - Excel / PDF export by category, type, stock status, and storage location
 - Low-stock, out-of-stock, and healthy-stock reporting
 - Exported stock status, reorder gap, and calculated stock value
+- Admin-managed QR / Public Link for physical Inventory cabinets
+- Public read-only Inventory view with safe field allowlisting
+- Public Category / Type / Stock Status / Storage Location filtering
+- Public filtered Excel / PDF Inventory reporting
+- Revocable and disableable signed public-link tokens
 
 ### Jobs & Clients
 
@@ -236,7 +241,21 @@ Custom `master_admin` profiles are intentionally not supported.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.11**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.12**.
+
+### 1.1.12 - Secure Public Inventory QR
+
+- **Master Admin** and **Admin** can generate and manage a cabinet **Inventory QR / Public Link**.
+- The management controls are not shown to Supervisor, Technician, Viewer, or public users.
+- The public Inventory route is **read-only** and contains no add, edit, stock-adjustment, delete, or authenticated application actions.
+- Public Inventory can be searched and filtered by **Category**, **Type**, **Stock Status**, and **Storage Location**.
+- Public users can generate filtered **Excel** and **PDF** Inventory reports.
+- Public output excludes internal database IDs, users, transaction history, and unit pricing.
+- Public link tokens are HMAC signed and can be disabled, re-enabled, or reset.
+- **Reset Link** revokes every previously printed/shared Inventory QR immediately.
+- A printable cabinet QR label can be downloaded from the Inventory page.
+- Public endpoints use no-store/no-index headers, query length limits, regex escaping, and lightweight request throttling.
+- Public-link generate/reset/enable/disable actions are recorded in the Audit Trail.
 
 ### 1.1.11 - Inventory Export Center & Guided Excel Imports
 

@@ -31,6 +31,7 @@ import SettingsPage from "@/pages/Settings";
 import VersionHistory from "@/pages/VersionHistory";
 import RoleProfiles from "@/pages/RoleProfiles";
 import PublicEquipment from "@/pages/PublicEquipment";
+import PublicInventory from "@/pages/PublicInventory";
 
 function FullLoader() {
   return (
@@ -105,6 +106,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/q/e/:token" element={<PublicEquipment />} />
+      <Route path="/q/inventory/:token" element={<PublicInventory />} />
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<Protected menu="dash"><Dashboard /></Protected>} />
       <Route path="/equipment" element={<Protected menu="eq"><EquipmentList /></Protected>} />
