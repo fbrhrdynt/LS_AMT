@@ -140,6 +140,11 @@ def build_maintenance_pdf(
         return f"{currency} {float(v or 0):,.2f}"
 
     buf = io.BytesIO()
+    maintenance_no = str(
+        mnt.get("mnt_no")
+        or "Maintenance"
+    ).strip()
+
     doc = SimpleDocTemplate(
         buf,
         pagesize=A4,
@@ -147,6 +152,15 @@ def build_maintenance_pdf(
         bottomMargin=16 * mm,
         leftMargin=18 * mm,
         rightMargin=18 * mm,
+        title=(
+            "AMT Maintenance Report - "
+            f"{maintenance_no}"
+        ),
+        author="LogiSource Digital",
+        subject=(
+            "AMT Asset Maintenance "
+            "Tracker maintenance report"
+        ),
     )
     ss = _styles()
     el = []

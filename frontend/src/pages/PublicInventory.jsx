@@ -163,7 +163,7 @@ export default function PublicInventory() {
           </div>
 
           <p className="mt-1 text-sm text-slate-500">
-            Public cabinet inventory view. No login required. Add, edit, adjust stock, and delete actions are not available here.
+            Current cabinet inventory.
           </p>
         </div>
 
@@ -414,11 +414,6 @@ export default function PublicInventory() {
                 )}
             </section>
 
-            {data?.public_notice && (
-              <p className="mt-4 text-center text-[11px] leading-5 text-slate-400">
-                {data.public_notice}
-              </p>
-            )}
           </>
         )}
 

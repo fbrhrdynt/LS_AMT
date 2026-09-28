@@ -7,6 +7,24 @@
   },
   "versions": [
     {
+      "version": "1.1.13",
+      "status": "stable",
+      "title": "Public Inventory UX & PDF Metadata Fixes",
+      "summary": "Fixed Inventory public-link persistence and route collisions, simplified public/QR copy, and added proper metadata to AMT-generated PDFs.",
+      "changes": [
+        "Fixed the Inventory page Item not found toast that appeared automatically for Admin/Master Admin.",
+        "Moved Inventory public-link management to a dedicated non-colliding API namespace.",
+        "Existing generated Inventory public links remain recognized correctly after page refresh.",
+        "Existing QR links now use View QR / Public Link instead of misleading users with Generate QR / Public Link.",
+        "Generate QR / Public Link appears only when no public link exists yet.",
+        "Simplified the public Inventory page subtitle and removed unnecessary technical explanation text.",
+        "Simplified the printable Inventory QR label text.",
+        "Added explicit PDF title, author, and subject metadata to generic AMT PDF exports.",
+        "Added explicit PDF metadata to Maintenance Report PDFs.",
+        "Browser PDF tabs and document properties now use proper AMT report titles instead of anonymous metadata."
+      ]
+    },
+    {
       "version": "1.1.12",
       "status": "stable",
       "title": "Secure Public Inventory QR",

@@ -424,15 +424,6 @@ def _qr_label_png(url: str) -> bytes:
         title_font,
     )
 
-    _center_text(
-        draw,
-        width,
-        120,
-        "Public View - Read Only",
-        sub_font,
-        fill="#475569",
-    )
-
     qr = qrcode.make(url).convert("RGB")
     qr = qr.resize(
         (760, 760),
@@ -455,16 +446,7 @@ def _qr_label_png(url: str) -> bytes:
     _center_text(
         draw,
         width,
-        1080,
-        "No login required - no add / edit / delete access",
-        footer_font,
-        fill="#64748B",
-    )
-
-    _center_text(
-        draw,
-        width,
-        1140,
+        1090,
         "Powered by AMT - LogiSource Digital",
         footer_font,
         fill="#64748B",
@@ -498,14 +480,14 @@ async def _management_payload():
     }
 
 
-@router.get("/inventory/public-link")
+@router.get("/inventory-public-access")
 async def inventory_public_link(
     user: dict = Depends(ADMIN),
 ):
     return await _management_payload()
 
 
-@router.post("/inventory/public-link/generate")
+@router.post("/inventory-public-access/generate")
 async def generate_inventory_public_link(
     user: dict = Depends(ADMIN),
 ):
@@ -550,7 +532,7 @@ async def generate_inventory_public_link(
     return await _management_payload()
 
 
-@router.post("/inventory/public-link/reset")
+@router.post("/inventory-public-access/reset")
 async def reset_inventory_public_link(
     user: dict = Depends(ADMIN),
 ):
@@ -585,7 +567,7 @@ async def reset_inventory_public_link(
     return await _management_payload()
 
 
-@router.post("/inventory/public-link/disable")
+@router.post("/inventory-public-access/disable")
 async def disable_inventory_public_link(
     user: dict = Depends(ADMIN),
 ):
@@ -619,7 +601,7 @@ async def disable_inventory_public_link(
     return await _management_payload()
 
 
-@router.post("/inventory/public-link/enable")
+@router.post("/inventory-public-access/enable")
 async def enable_inventory_public_link(
     user: dict = Depends(ADMIN),
 ):
@@ -655,7 +637,7 @@ async def enable_inventory_public_link(
     return await _management_payload()
 
 
-@router.get("/inventory/public-link/qr.png")
+@router.get("/inventory-public-access/qr.png")
 async def inventory_public_qr(
     download: bool = Query(False),
     user: dict = Depends(ADMIN),
@@ -689,7 +671,7 @@ async def inventory_public_qr(
     )
 
 
-@router.get("/inventory/public-link/qr-label.png")
+@router.get("/inventory-public-access/qr-label.png")
 async def inventory_public_qr_label(
     download: bool = Query(False),
     user: dict = Depends(ADMIN),
@@ -775,11 +757,6 @@ async def public_inventory(
                     "Consumable",
                 ],
                 "items": items,
-                "public_notice": (
-                    "Read-only operational inventory view. "
-                    "Internal database IDs, inventory transaction history, "
-                    "user information, and unit pricing are not exposed."
-                ),
             }
         ),
         media_type="application/json",

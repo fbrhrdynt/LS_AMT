@@ -809,6 +809,10 @@ def _xlsx_bytes(
 
 def _pdf_bytes(title, headers, rows, timezone_name, brand_logo_bytes=None):
     buf = io.BytesIO()
+    pdf_title = (
+        f"AMT - {title} Export"
+    )
+
     doc = SimpleDocTemplate(
         buf,
         pagesize=landscape(A4),
@@ -816,6 +820,11 @@ def _pdf_bytes(title, headers, rows, timezone_name, brand_logo_bytes=None):
         rightMargin=10 * mm,
         topMargin=10 * mm,
         bottomMargin=12 * mm,
+        title=pdf_title,
+        author="LogiSource Digital",
+        subject=(
+            f"AMT {title} report"
+        ),
     )
 
     styles = getSampleStyleSheet()
