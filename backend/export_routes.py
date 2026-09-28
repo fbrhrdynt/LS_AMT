@@ -29,7 +29,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from auth import get_current_user
+from auth import get_current_user, has_menu_permission
 from branding import get_pdf_brand_logo_bytes
 from core import db
 from license_service import require_feature_enabled
@@ -1080,6 +1080,19 @@ async def export_xlsx(
         "export_data"
     )
 
+    if (
+        dataset == "inventory"
+        and not has_menu_permission(
+            user,
+            "inv",
+            "view",
+        )
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Inventory view permission required",
+        )
+
     params = _params(q=q, status=status, placement=placement, type=type, category=category, low=low,
                      stock_status=stock_status, storage_location=storage_location,
                      entity_type=entity_type, sap_no=sap_no, serial_no=serial_no,
@@ -1116,6 +1129,19 @@ async def export_pdf(
     await require_feature_enabled(
         "export_data"
     )
+
+    if (
+        dataset == "inventory"
+        and not has_menu_permission(
+            user,
+            "inv",
+            "view",
+        )
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Inventory view permission required",
+        )
 
     params = _params(q=q, status=status, placement=placement, type=type, category=category, low=low,
                      stock_status=stock_status, storage_location=storage_location,

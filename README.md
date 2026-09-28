@@ -241,7 +241,21 @@ Custom `master_admin` profiles are intentionally not supported.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.1.14**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.2.0**.
+
+### 1.2.0 - Category Cabinet QR & Granular Inventory Permissions
+
+- Added one secure **QR / Public Link per Inventory category** for physical cabinets.
+- New categories automatically receive their own stable QR link.
+- Inventory shows **View QR / Public Link** per category, with Copy, Open, Download Cabinet Label, Reset, Disable, and Enable actions.
+- Public category pages are locked to their category and support Search, Type, Stock Status, Storage Location, sorting, Excel, and PDF.
+- Category PDF/Excel reports use the full Inventory report columns, including **Unit Price** and **Stock Value**.
+- Existing Inventory menu access now grants Inventory operations by default regardless of built-in/custom base role.
+- Master Admin and Admin can configure per-user Inventory **View / Add / Edit-Adjust / Delete / Public QR** permissions.
+- Backend Inventory routes enforce the granular permissions.
+- Inventory export requires Inventory View permission.
+- Existing users remain backward compatible when no granular permission override has been saved.
+- Updater source now normalizes Base64 whitespace before strict release-signature verification.
 
 ### 1.1.14 - Public Inventory UX & PDF Metadata Fixes
 

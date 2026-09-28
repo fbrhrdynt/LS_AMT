@@ -37,6 +37,9 @@ import {
   TextInput,
 } from "@/components/Bits";
 import { fmtDate } from "@/lib/helpers";
+import InventoryPermissionEditor, {
+  INVENTORY_PERMISSION_KEYS,
+} from "@/components/InventoryPermissionEditor";
 import {
   Dialog,
   DialogContent,
@@ -90,6 +93,11 @@ const empty = {
   role: "technician",
   role_profile_id: "",
   menu_access: [...ALL_MENU_KEYS],
+  menu_permissions: {
+    inv: [
+      ...INVENTORY_PERMISSION_KEYS,
+    ],
+  },
 };
 
 function isFebro(target) {
@@ -228,6 +236,12 @@ export default function UsersPage() {
     useState(false);
   const [accessTarget, setAccessTarget] = useState(null);
   const [accessValue, setAccessValue] = useState([]);
+  const [
+    accessInventoryPermissions,
+    setAccessInventoryPermissions,
+  ] = useState([
+    ...INVENTORY_PERMISSION_KEYS,
+  ]);
 
   const createRoles = useMemo(
     () => availableRoles(user),
@@ -316,6 +330,16 @@ export default function UsersPage() {
       menu_access: [
         ...delegableMenuKeys,
       ],
+      menu_permissions:
+        delegableMenuKeys.includes(
+          "inv"
+        )
+          ? {
+              inv: [
+                ...INVENTORY_PERMISSION_KEYS,
+              ],
+            }
+          : {},
     });
     setShowPassword(false);
     setDialog(true);
@@ -381,6 +405,10 @@ export default function UsersPage() {
         ...payload
       } = form;
 
+      if (!isAdmin(user)) {
+        delete payload.menu_permissions;
+      }
+
       await api.post(
         "/users",
         payload
@@ -394,6 +422,16 @@ export default function UsersPage() {
         menu_access: [
           ...delegableMenuKeys,
         ],
+        menu_permissions:
+          delegableMenuKeys.includes(
+            "inv"
+          )
+            ? {
+                inv: [
+                  ...INVENTORY_PERMISSION_KEYS,
+                ],
+              }
+            : {},
       });
       load();
     } catch (error) {
@@ -465,9 +503,18 @@ export default function UsersPage() {
     };
 
   const openAccess = (target) => {
-    if (!canManageTarget(user, target)) return;
+    if (
+      !isAdmin(user) ||
+      !canManageTarget(
+        user,
+        target
+      )
+    ) {
+      return;
+    }
 
     setAccessTarget(target);
+
     const currentAccess =
       Array.isArray(
         target.menu_access
@@ -485,21 +532,67 @@ export default function UsersPage() {
           )
       )
     );
+
+    setAccessInventoryPermissions(
+      Array.isArray(
+        target
+          .menu_permissions
+          ?.inv
+      )
+        ? [
+            ...target
+              .menu_permissions
+              .inv,
+          ]
+        : currentAccess.includes(
+            "inv"
+          )
+          ? [
+              ...INVENTORY_PERMISSION_KEYS,
+            ]
+          : []
+    );
   };
 
   const saveAccess = async () => {
-    if (!accessTarget) return;
+    if (
+      !accessTarget ||
+      !isAdmin(user)
+    ) {
+      return;
+    }
 
     try {
-      await api.patch(`/users/${accessTarget.id}/access`, {
-        menu_access: accessValue,
-      });
-      toast.success("Menu access updated");
+      await api.patch(
+        `/users/${accessTarget.id}/permissions`,
+        {
+          menu_access:
+            accessValue,
+          menu_permissions:
+            accessValue.includes(
+              "inv"
+            )
+              ? {
+                  inv:
+                    accessInventoryPermissions,
+                }
+              : {
+                  inv: [],
+                },
+        }
+      );
+
+      toast.success(
+        "Access permissions updated"
+      );
       setAccessTarget(null);
       load();
     } catch (error) {
       toast.error(
-        formatApiError(error.response?.data?.detail)
+        formatApiError(
+          error.response?.data
+            ?.detail
+        )
       );
     }
   };
@@ -567,7 +660,8 @@ export default function UsersPage() {
           account authority. Admin can manage Admin, Supervisor, Technician
           and Viewer. Supervisor can manage Technician and Viewer. Custom
           roles keep a built-in permission level underneath, while Menu Access
-          remains configurable per user account.
+          remains configurable per user account. Master Admin and Admin can also
+          set granular Inventory View, Add, Edit/Adjust, Delete, and Public QR permissions.
         </div>
       </div>
 
@@ -698,6 +792,7 @@ export default function UsersPage() {
                       <button
                         type="button"
                         disabled={
+                          !isAdmin(user) ||
                           !manageable ||
                           target.id === user.id ||
                           target.role === "master_admin"
@@ -926,6 +1021,19 @@ export default function UsersPage() {
                     []
                   ),
                 ],
+                menu_permissions:
+                  (
+                    profile.menu_access ||
+                    []
+                  ).includes(
+                    "inv"
+                  )
+                    ? {
+                        inv: [
+                          ...INVENTORY_PERMISSION_KEYS,
+                        ],
+                      }
+                    : {},
               });
             }}
           >
@@ -986,9 +1094,63 @@ export default function UsersPage() {
               "Master Admin always has access to all menus."
             }
             onChange={(menu_access) =>
-              setForm({ ...form, menu_access })
+              setForm({
+                ...form,
+                menu_access,
+                menu_permissions:
+                  menu_access.includes(
+                    "inv"
+                  )
+                    ? {
+                        ...form.menu_permissions,
+                        inv:
+                          form
+                            .menu_permissions
+                            ?.inv
+                            ?.length
+                            ? form
+                                .menu_permissions
+                                .inv
+                            : [
+                                ...INVENTORY_PERMISSION_KEYS,
+                              ],
+                      }
+                    : {
+                        ...form.menu_permissions,
+                        inv: [],
+                      },
+              })
             }
           />
+
+          {isAdmin(user) &&
+            form.menu_access.includes(
+              "inv"
+            ) && (
+              <InventoryPermissionEditor
+                value={
+                  form
+                    .menu_permissions
+                    ?.inv ||
+                  []
+                }
+                onChange={(
+                  inv
+                ) =>
+                  setForm({
+                    ...form,
+                    menu_permissions:
+                      {
+                        ...form.menu_permissions,
+                        inv,
+                      },
+                  })
+                }
+                disabled={
+                  masterSelected
+                }
+              />
+            )}
 
           <DialogFooter>
             <Btn variant="outline" onClick={() => setDialog(false)}>
@@ -1014,10 +1176,10 @@ export default function UsersPage() {
           if (!open) setAccessTarget(null);
         }}
       >
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Menu Access — {accessTarget?.name}
+              Access Permissions — {accessTarget?.name}
             </DialogTitle>
           </DialogHeader>
 
@@ -1033,8 +1195,55 @@ export default function UsersPage() {
               accessTarget?.role ===
                 "master_admin"
             }
-            onChange={setAccessValue}
+            onChange={(
+              nextAccess
+            ) => {
+              setAccessValue(
+                nextAccess
+              );
+
+              if (
+                nextAccess.includes(
+                  "inv"
+                ) &&
+                accessInventoryPermissions
+                  .length === 0
+              ) {
+                setAccessInventoryPermissions(
+                  [
+                    ...INVENTORY_PERMISSION_KEYS,
+                  ]
+                );
+              }
+
+              if (
+                !nextAccess.includes(
+                  "inv"
+                )
+              ) {
+                setAccessInventoryPermissions(
+                  []
+                );
+              }
+            }}
           />
+
+          {accessValue.includes(
+            "inv"
+          ) && (
+            <InventoryPermissionEditor
+              value={
+                accessInventoryPermissions
+              }
+              onChange={
+                setAccessInventoryPermissions
+              }
+              disabled={
+                accessTarget?.role ===
+                  "master_admin"
+              }
+            />
+          )}
 
           <DialogFooter>
             <Btn variant="outline" onClick={() => setAccessTarget(null)}>

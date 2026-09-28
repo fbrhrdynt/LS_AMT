@@ -5,11 +5,15 @@ from pydantic import BaseModel, Field
 from pymongo import ReturnDocument
 
 from core import db, new_id, now_iso, audit_log
-from auth import get_current_user, require_roles
+from auth import require_menu_permission
+from public_inventory_category_routes import ensure_category_link
 
 
 router = APIRouter(prefix="/api")
-MANAGE = require_roles("admin", "supervisor")
+VIEW = require_menu_permission("inv", "view")
+ADD = require_menu_permission("inv", "add")
+EDIT = require_menu_permission("inv", "edit")
+DELETE = require_menu_permission("inv", "delete")
 
 
 class ItemBody(BaseModel):
@@ -83,7 +87,7 @@ def _clean_item_payload(body: ItemBody) -> dict:
 
 @router.get("/inventory-categories")
 async def list_inventory_categories(
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(VIEW),
 ):
     values = await db.inventory_items.distinct(
         "category",
@@ -111,7 +115,7 @@ async def list_inventory(
     category: str = "",
     low: str = "",
     sort: str = "category_asc",
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(VIEW),
 ):
     query = {}
 
@@ -188,7 +192,7 @@ async def list_inventory(
 @router.get("/inventory/{iid}")
 async def get_item(
     iid: str,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(VIEW),
 ):
     item = await db.inventory_items.find_one(
         {"id": iid},
@@ -219,7 +223,7 @@ async def get_item(
 @router.post("/inventory")
 async def create_item(
     body: ItemBody,
-    user: dict = Depends(MANAGE),
+    user: dict = Depends(ADD),
 ):
     payload = _clean_item_payload(body)
 
@@ -260,6 +264,12 @@ async def create_item(
             }
         )
 
+    if doc.get("category"):
+        await ensure_category_link(
+            doc["category"],
+            user,
+        )
+
     await audit_log(
         "inventory",
         doc["id"],
@@ -283,7 +293,7 @@ async def create_item(
 async def update_item(
     iid: str,
     body: ItemBody,
-    user: dict = Depends(MANAGE),
+    user: dict = Depends(EDIT),
 ):
     item = await db.inventory_items.find_one(
         {"id": iid}
@@ -338,6 +348,12 @@ async def update_item(
             ),
         )
 
+    if payload.get("category"):
+        await ensure_category_link(
+            payload["category"],
+            user,
+        )
+
     if change:
         await db.inventory_transactions.insert_one(
             {
@@ -388,7 +404,7 @@ async def update_item(
 async def adjust_stock(
     iid: str,
     body: AdjustBody,
-    user: dict = Depends(MANAGE),
+    user: dict = Depends(EDIT),
 ):
     delta = float(body.qty)
 
@@ -472,7 +488,7 @@ async def adjust_stock(
 @router.delete("/inventory/{iid}")
 async def delete_item(
     iid: str,
-    user: dict = Depends(MANAGE),
+    user: dict = Depends(DELETE),
 ):
     item = await db.inventory_items.find_one(
         {"id": iid}
@@ -521,7 +537,7 @@ async def delete_item(
 @router.get("/inventory-transactions")
 async def all_transactions(
     item_id: str = "",
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(VIEW),
 ):
     query = (
         {"item_id": item_id}

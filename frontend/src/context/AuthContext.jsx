@@ -223,6 +223,54 @@ export const hasMenuAccess = (
   );
 };
 
+export const MENU_PERMISSION_OPERATIONS = [
+  "view",
+  "add",
+  "edit",
+  "delete",
+  "public",
+];
+
+export const hasMenuPermission = (
+  user,
+  key,
+  operation = "view"
+) => {
+  if (!user) return false;
+
+  if (isMasterAdmin(user)) {
+    return true;
+  }
+
+  if (
+    !hasMenuAccess(
+      user,
+      key
+    )
+  ) {
+    return false;
+  }
+
+  const permissions =
+    user.menu_permissions;
+
+  if (
+    !permissions ||
+    typeof permissions !==
+      "object" ||
+    !Array.isArray(
+      permissions[key]
+    )
+  ) {
+    return true;
+  }
+
+  return permissions[
+    key
+  ].includes(operation);
+};
+
+
 export const hasLicenseFeature = (
   license,
   feature

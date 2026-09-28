@@ -184,10 +184,28 @@ def verify_signature(package, signature_b64):
         raise RuntimeError(f"Public release key not found: {PUBLIC_KEY}")
 
     signature = STATE_ROOT / "release.sig"
+
+    signature_b64 = "".join(
+        str(
+            signature_b64
+            or ""
+        ).split()
+    )
+
+    if not signature_b64:
+        raise RuntimeError(
+            "Release signature is empty"
+        )
+
     try:
-        raw = base64.b64decode(signature_b64, validate=True)
+        raw = base64.b64decode(
+            signature_b64,
+            validate=True,
+        )
     except Exception as exc:
-        raise RuntimeError("Release signature is not valid Base64") from exc
+        raise RuntimeError(
+            "Release signature is not valid Base64"
+        ) from exc
 
     signature.write_bytes(raw)
     os.chmod(signature, 0o600)

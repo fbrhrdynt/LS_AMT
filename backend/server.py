@@ -18,6 +18,7 @@ from misc_routes import router as misc_router
 from admin_routes import router as admin_router
 from public_routes import router as public_router
 from public_inventory_routes import router as public_inventory_router
+from public_inventory_category_routes import router as public_inventory_category_router
 from settings_routes import router as settings_router
 from export_routes import router as export_router
 from license_routes import router as license_router
@@ -130,6 +131,7 @@ app.include_router(misc_router)
 app.include_router(admin_router)
 app.include_router(public_router)
 app.include_router(public_inventory_router)
+app.include_router(public_inventory_category_router)
 app.include_router(settings_router)
 app.include_router(export_router)
 app.include_router(license_router)
@@ -156,6 +158,22 @@ async def _ensure_indexes():
         "name_key",
         unique=True,
         name="uniq_role_profiles_name",
+    )
+
+    await db.public_inventory_category_links.create_index(
+        "id",
+        unique=True,
+        name="uniq_public_inventory_category_id",
+    )
+    await db.public_inventory_category_links.create_index(
+        "category_key",
+        unique=True,
+        name="uniq_public_inventory_category_name",
+    )
+    await db.public_inventory_category_links.create_index(
+        "token_id",
+        unique=True,
+        name="uniq_public_inventory_category_token",
     )
 
     await db.auth_sessions.create_index("jti_hash", unique=True, name="uniq_auth_session_jti")

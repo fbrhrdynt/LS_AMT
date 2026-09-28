@@ -12,8 +12,7 @@ import { toast } from "sonner";
 import { api, formatApiError } from "@/lib/api";
 import {
   useAuth,
-  canManage,
-  isAdmin,
+  hasMenuPermission,
 } from "@/context/AuthContext";
 import { useCurrency } from "@/context/CurrencyContext";
 import {
@@ -62,6 +61,31 @@ export default function Inventory() {
   const { user } = useAuth();
   const { format } = useCurrency();
   const [sp] = useSearchParams();
+
+  const canAddInventory =
+    hasMenuPermission(
+      user,
+      "inv",
+      "add"
+    );
+  const canEditInventory =
+    hasMenuPermission(
+      user,
+      "inv",
+      "edit"
+    );
+  const canDeleteInventory =
+    hasMenuPermission(
+      user,
+      "inv",
+      "delete"
+    );
+  const canPublicInventory =
+    hasMenuPermission(
+      user,
+      "inv",
+      "public"
+    );
 
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -259,7 +283,7 @@ export default function Inventory() {
         subtitle={`${items.length} inventory items`}
         hideExport
       >
-        {canManage(user) && (
+        {canAddInventory && (
           <Btn
             onClick={openCreate}
             data-testid="add-item-btn"
@@ -270,8 +294,10 @@ export default function Inventory() {
         )}
       </PageHeader>
 
-      {isAdmin(user) && (
-        <InventoryPublicAccess />
+      {canPublicInventory && (
+        <InventoryPublicAccess
+          categories={categories}
+        />
       )}
 
       <Panel
@@ -541,34 +567,53 @@ export default function Inventory() {
             align: "right",
             stop: true,
             render: (item) =>
-              canManage(user) && (
+              (
+                canEditInventory ||
+                canDeleteInventory
+              ) && (
                 <span className="whitespace-nowrap">
-                  <button
-                    onClick={() => setAdjust(item)}
-                    title="Adjust stock"
-                    className="mr-2 text-slate-400 hover:text-blue-600"
-                    data-testid={`adjust-${item.id}`}
-                  >
-                    <ArrowUpDown className="inline h-4 w-4" />
-                  </button>
+                  {canEditInventory && (
+                    <>
+                      <button
+                        onClick={() =>
+                          setAdjust(
+                            item
+                          )
+                        }
+                        title="Adjust stock"
+                        className="mr-2 text-slate-400 hover:text-blue-600"
+                        data-testid={`adjust-${item.id}`}
+                      >
+                        <ArrowUpDown className="inline h-4 w-4" />
+                      </button>
 
-                  <button
-                    onClick={() => openEdit(item)}
-                    title="Edit"
-                    className="mr-2 text-slate-400 hover:text-blue-600"
-                    data-testid={`edit-item-${item.id}`}
-                  >
-                    <Pencil className="inline h-4 w-4" />
-                  </button>
+                      <button
+                        onClick={() =>
+                          openEdit(
+                            item
+                          )
+                        }
+                        title="Edit"
+                        className="mr-2 text-slate-400 hover:text-blue-600"
+                        data-testid={`edit-item-${item.id}`}
+                      >
+                        <Pencil className="inline h-4 w-4" />
+                      </button>
+                    </>
+                  )}
 
-                  <button
-                    onClick={() => del(item)}
-                    title="Delete"
-                    className="text-slate-400 hover:text-red-600"
-                    data-testid={`delete-item-${item.id}`}
-                  >
-                    <Trash2 className="inline h-4 w-4" />
-                  </button>
+                  {canDeleteInventory && (
+                    <button
+                      onClick={() =>
+                        del(item)
+                      }
+                      title="Delete"
+                      className="text-slate-400 hover:text-red-600"
+                      data-testid={`delete-item-${item.id}`}
+                    >
+                      <Trash2 className="inline h-4 w-4" />
+                    </button>
+                  )}
                 </span>
               ),
           },

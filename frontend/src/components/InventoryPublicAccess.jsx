@@ -1,7 +1,6 @@
 import {
   Copy,
   ExternalLink,
-  Link2,
   Power,
   QrCode,
   RefreshCcw,
@@ -9,6 +8,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import { toast } from "sonner";
@@ -24,64 +24,108 @@ import {
 } from "@/components/Bits";
 
 
-export default function InventoryPublicAccess() {
-  const [state, setState] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+export default function InventoryPublicAccess({
+  categories = [],
+}) {
+  const [links, setLinks] =
+    useState([]);
+  const [busyId, setBusyId] =
+    useState("");
+  const [expandedId, setExpandedId] =
+    useState("");
 
-  const load = useCallback(async () => {
-    try {
-      const { data } = await api.get(
-        "/inventory-public-access"
-      );
-      setState(data);
-    } catch (error) {
-      toast.error(
-        formatApiError(
-          error.response?.data?.detail
-        ) ||
-          "Could not load Inventory public access"
-      );
-    }
-  }, []);
+  const categoryKey = useMemo(
+    () =>
+      [...categories]
+        .sort()
+        .join("|"),
+    [categories]
+  );
+
+  const sync = useCallback(
+    async () => {
+      try {
+        const { data } =
+          await api.post(
+            "/inventory-category-public-access/sync"
+          );
+
+        setLinks(
+          Array.isArray(data)
+            ? data
+            : []
+        );
+      } catch (error) {
+        toast.error(
+          formatApiError(
+            error.response?.data
+              ?.detail
+          ) ||
+            "Could not load category QR links"
+        );
+      }
+    },
+    []
+  );
 
   useEffect(() => {
-    load();
-  }, [load]);
+    sync();
+  }, [
+    sync,
+    categoryKey,
+  ]);
+
+  const updateLink = (
+    updated
+  ) => {
+    setLinks(
+      (current) =>
+        current.map(
+          (item) =>
+            item.id ===
+            updated.id
+              ? updated
+              : item
+        )
+    );
+  };
 
   const action = async (
-    path,
-    message,
-    openAfter = false
+    link,
+    suffix,
+    message
   ) => {
-    setBusy(true);
+    setBusyId(link.id);
 
     try {
-      const { data } = await api.post(path);
-      setState(data);
+      const { data } =
+        await api.post(
+          `/inventory-category-public-access/${link.id}/${suffix}`
+        );
 
-      if (openAfter) {
-        setExpanded(true);
-      }
-
+      updateLink(data);
+      setExpandedId(
+        data.id
+      );
       toast.success(message);
     } catch (error) {
       toast.error(
         formatApiError(
-          error.response?.data?.detail
+          error.response?.data
+            ?.detail
         )
       );
     } finally {
-      setBusy(false);
+      setBusyId("");
     }
   };
 
-  const copy = async () => {
-    if (!state?.public_url) return;
-
+  const copy = async (
+    link
+  ) => {
     try {
       await navigator.clipboard.writeText(
-        state.public_url
+        link.public_url
       );
       toast.success(
         "Public link copied"
@@ -93,202 +137,206 @@ export default function InventoryPublicAccess() {
     }
   };
 
-  const reset = async () => {
+  const reset = async (
+    link
+  ) => {
     if (
       !window.confirm(
-        "Reset the public Inventory link? " +
-          "Any QR label already printed will immediately stop working."
+        `Reset QR link for ${link.category}? ` +
+          "The previous printed QR will stop working."
       )
     ) {
       return;
     }
 
     await action(
-      "/inventory-public-access/reset",
-      "Public Inventory link reset",
-      true
-    );
-  };
-
-  const disable = async () => {
-    if (
-      !window.confirm(
-        "Disable the public Inventory link? " +
-          "Scanned QR codes will stop working until re-enabled."
-      )
-    ) {
-      return;
-    }
-
-    await action(
-      "/inventory-public-access/disable",
-      "Public Inventory link disabled"
+      link,
+      "reset",
+      `${link.category} QR link reset`
     );
   };
 
   return (
     <Panel
-      title="Inventory QR / Public Link"
+      title="Inventory QR / Public Link by Category"
       className="mb-5"
     >
       <div className="p-4">
         <p className="text-xs leading-5 text-slate-500">
-          Manage the QR code and public Inventory link used on the physical cabinet.
+          Each Inventory category has its own cabinet QR. New categories receive a QR automatically.
         </p>
 
-        {!state?.generated ? (
-          <div className="mt-4">
-            <Btn
-              onClick={() =>
-                action(
-                  "/inventory-public-access/generate",
-                  "Public Inventory link generated",
-                  true
-                )
-              }
-              disabled={busy}
-              data-testid="generate-inventory-public-link"
-            >
-              <QrCode className="h-4 w-4" />
-              Generate QR / Public Link
-            </Btn>
+        {links.length === 0 ? (
+          <div className="mt-4 rounded-md border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400">
+            No Inventory category available yet.
           </div>
         ) : (
-          <>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Btn
-                variant="outline"
-                onClick={() =>
-                  setExpanded(
-                    (value) => !value
-                  )
-                }
-                data-testid="view-inventory-public-link"
-              >
-                <QrCode className="h-4 w-4" />
-                {expanded
-                  ? "Hide QR / Public Link"
-                  : "View QR / Public Link"}
-              </Btn>
+          <div className="mt-4 space-y-3">
+            {links.map(
+              (link) => {
+                const expanded =
+                  expandedId ===
+                  link.id;
+                const busy =
+                  busyId ===
+                  link.id;
 
-              <span
-                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                  state.enabled
-                    ? "border-green-200 bg-green-50 text-green-700"
-                    : "border-red-200 bg-red-50 text-red-700"
-                }`}
-              >
-                {state.enabled
-                  ? "Active"
-                  : "Disabled"}
-              </span>
-            </div>
+                return (
+                  <div
+                    key={link.id}
+                    className="rounded-lg border border-slate-200 bg-white"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-3">
+                      <div>
+                        <div className="font-semibold text-slate-900">
+                          {link.category}
+                        </div>
+                        <div className="mt-0.5 text-xs text-slate-400">
+                          {link.item_count ?? 0} item(s)
+                        </div>
+                      </div>
 
-            {expanded && (
-              <div className="mt-4 grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-                <div className="rounded-lg border border-slate-200 bg-white p-3">
-                  <img
-                    src={`${API}/inventory-public-access/qr.png?v=${
-                      state.updated_at || ""
-                    }`}
-                    alt="Inventory public QR"
-                    className="mx-auto aspect-square w-full max-w-[190px]"
-                  />
-                </div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                            link.enabled
+                              ? "border-green-200 bg-green-50 text-green-700"
+                              : "border-red-200 bg-red-50 text-red-700"
+                          }`}
+                        >
+                          {link.enabled
+                            ? "Active"
+                            : "Disabled"}
+                        </span>
 
-                <div className="min-w-0">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Public URL
-                  </label>
+                        <Btn
+                          variant="outline"
+                          onClick={() =>
+                            setExpandedId(
+                              expanded
+                                ? ""
+                                : link.id
+                            )
+                          }
+                        >
+                          <QrCode className="h-4 w-4" />
+                          {expanded
+                            ? "Hide QR / Public Link"
+                            : "View QR / Public Link"}
+                        </Btn>
+                      </div>
+                    </div>
 
-                  <div className="mt-1 flex min-w-0 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                    <Link2 className="h-4 w-4 shrink-0 text-slate-400" />
+                    {expanded && (
+                      <div className="grid gap-4 border-t border-slate-100 p-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+                        <div className="rounded-lg border border-slate-200 bg-white p-3">
+                          <img
+                            src={`${API}/inventory-category-public-access/${link.id}/qr.png?v=${
+                              link.updated_at || ""
+                            }`}
+                            alt={`${link.category} Inventory QR`}
+                            className="mx-auto aspect-square w-full max-w-[190px]"
+                          />
+                        </div>
 
-                    <code className="min-w-0 flex-1 break-all text-xs text-slate-700">
-                      {state.public_url}
-                    </code>
-                  </div>
+                        <div className="min-w-0">
+                          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Public URL
+                          </label>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Btn
-                      variant="outline"
-                      onClick={copy}
-                    >
-                      <Copy className="h-4 w-4" />
-                      Copy Link
-                    </Btn>
+                          <div className="mt-1 break-all rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700">
+                            {link.public_url}
+                          </div>
 
-                    <Btn
-                      variant="outline"
-                      onClick={() =>
-                        window.open(
-                          state.public_url,
-                          "_blank",
-                          "noopener,noreferrer"
-                        )
-                      }
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      Open Public View
-                    </Btn>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Btn
+                              variant="outline"
+                              onClick={() =>
+                                copy(link)
+                              }
+                            >
+                              <Copy className="h-4 w-4" />
+                              Copy Link
+                            </Btn>
 
-                    <Btn
-                      variant="outline"
-                      onClick={() =>
-                        window.open(
-                          `${API}/inventory-public-access/qr-label.png?download=true`,
-                          "_blank",
-                          "noopener,noreferrer"
-                        )
-                      }
-                    >
-                      <QrCode className="h-4 w-4" />
-                      Download Cabinet Label
-                    </Btn>
+                            <Btn
+                              variant="outline"
+                              onClick={() =>
+                                window.open(
+                                  link.public_url,
+                                  "_blank",
+                                  "noopener,noreferrer"
+                                )
+                              }
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              Open Public View
+                            </Btn>
 
-                    <Btn
-                      variant="outline"
-                      onClick={reset}
-                      disabled={busy}
-                    >
-                      <RefreshCcw className="h-4 w-4" />
-                      Reset Link
-                    </Btn>
+                            <Btn
+                              variant="outline"
+                              onClick={() =>
+                                window.open(
+                                  `${API}/inventory-category-public-access/${link.id}/qr-label.png?download=true`,
+                                  "_blank",
+                                  "noopener,noreferrer"
+                                )
+                              }
+                            >
+                              <QrCode className="h-4 w-4" />
+                              Download Cabinet Label
+                            </Btn>
 
-                    {state.enabled ? (
-                      <Btn
-                        variant="danger"
-                        onClick={disable}
-                        disabled={busy}
-                      >
-                        <Power className="h-4 w-4" />
-                        Disable Public Link
-                      </Btn>
-                    ) : (
-                      <Btn
-                        onClick={() =>
-                          action(
-                            "/inventory-public-access/enable",
-                            "Public Inventory link enabled",
-                            true
-                          )
-                        }
-                        disabled={busy}
-                      >
-                        <Power className="h-4 w-4" />
-                        Enable Public Link
-                      </Btn>
+                            <Btn
+                              variant="outline"
+                              onClick={() =>
+                                reset(link)
+                              }
+                              disabled={busy}
+                            >
+                              <RefreshCcw className="h-4 w-4" />
+                              Reset Link
+                            </Btn>
+
+                            {link.enabled ? (
+                              <Btn
+                                variant="danger"
+                                onClick={() =>
+                                  action(
+                                    link,
+                                    "disable",
+                                    `${link.category} public link disabled`
+                                  )
+                                }
+                                disabled={busy}
+                              >
+                                <Power className="h-4 w-4" />
+                                Disable
+                              </Btn>
+                            ) : (
+                              <Btn
+                                onClick={() =>
+                                  action(
+                                    link,
+                                    "enable",
+                                    `${link.category} public link enabled`
+                                  )
+                                }
+                                disabled={busy}
+                              >
+                                <Power className="h-4 w-4" />
+                                Enable
+                              </Btn>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
-
-                  <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
-                    Reset Link revokes the previous QR immediately.
-                    Print a new cabinet label after resetting.
-                  </div>
-                </div>
-              </div>
+                );
+              }
             )}
-          </>
+          </div>
         )}
       </div>
     </Panel>

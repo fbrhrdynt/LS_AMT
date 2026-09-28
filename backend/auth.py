@@ -98,6 +98,129 @@ def clear_auth_cookies(response: Response):
     response.headers["Pragma"] = "no-cache"
 
 
+MENU_PERMISSION_OPERATIONS = (
+    "view",
+    "add",
+    "edit",
+    "delete",
+    "public",
+)
+
+
+def _normalize_permission_values(
+    values,
+) -> list[str]:
+    selected = set(
+        values or []
+    )
+
+    normalized = [
+        operation
+        for operation in MENU_PERMISSION_OPERATIONS
+        if operation in selected
+    ]
+
+    if (
+        normalized
+        and "view" not in normalized
+    ):
+        normalized.insert(
+            0,
+            "view",
+        )
+
+    return normalized
+
+
+def normalize_menu_permissions(
+    user: dict,
+) -> dict[str, list[str]]:
+    if (
+        user.get("role")
+        == "master_admin"
+    ):
+        menus = list(
+            MENU_KEYS
+        )
+    elif isinstance(
+        user.get("menu_access"),
+        list,
+    ):
+        menus = [
+            key
+            for key in MENU_KEYS
+            if key
+            in user.get(
+                "menu_access",
+                [],
+            )
+        ]
+    else:
+        menus = list(
+            MENU_KEYS
+        )
+
+    raw = user.get(
+        "menu_permissions"
+    )
+
+    result = {}
+
+    for key in menus:
+        if (
+            isinstance(raw, dict)
+            and key in raw
+        ):
+            result[key] = (
+                _normalize_permission_values(
+                    raw.get(key)
+                )
+            )
+        else:
+            result[key] = list(
+                MENU_PERMISSION_OPERATIONS
+            )
+
+    return result
+
+
+def has_menu_permission(
+    user: dict,
+    menu_key: str,
+    operation: str = "view",
+) -> bool:
+    if not user:
+        return False
+
+    if (
+        user.get("role")
+        == "master_admin"
+    ):
+        return True
+
+    if (
+        menu_key
+        not in MENU_KEYS
+        or operation
+        not in MENU_PERMISSION_OPERATIONS
+    ):
+        return False
+
+    permissions = (
+        normalize_menu_permissions(
+            user
+        )
+    )
+
+    return (
+        operation
+        in permissions.get(
+            menu_key,
+            [],
+        )
+    )
+
+
 def public_user(user: dict) -> dict:
     user = clean(dict(user))
     user.pop("password_hash", None)
@@ -112,6 +235,12 @@ def public_user(user: dict) -> dict:
             for key in (user.get("menu_access") or [])
             if key in MENU_KEYS
         ]
+
+    user["menu_permissions"] = (
+        normalize_menu_permissions(
+            user
+        )
+    )
 
     return user
 
@@ -138,6 +267,33 @@ async def get_current_user(request: Request) -> dict:
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     return public_user(user)
+
+
+def require_menu_permission(
+    menu_key: str,
+    operation: str = "view",
+):
+    async def dependency(
+        user: dict = Depends(
+            get_current_user
+        ),
+    ) -> dict:
+        if not has_menu_permission(
+            user,
+            menu_key,
+            operation,
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Insufficient menu permission: "
+                    f"{menu_key}.{operation}"
+                ),
+            )
+
+        return user
+
+    return dependency
 
 
 def require_roles(*roles):
@@ -424,6 +580,77 @@ def _validate_delegated_menu_access(
     return normalized
 
 
+def _validate_delegated_menu_permissions(
+    actor: dict,
+    menu_access,
+    requested,
+) -> dict[str, list[str]]:
+    access = (
+        _validate_delegated_menu_access(
+            actor,
+            menu_access,
+        )
+    )
+
+    actor_permissions = (
+        normalize_menu_permissions(
+            actor
+        )
+    )
+
+    requested = (
+        requested
+        if isinstance(
+            requested,
+            dict,
+        )
+        else {}
+    )
+
+    result = {}
+
+    for key in access:
+        values = (
+            requested.get(
+                key,
+                MENU_PERMISSION_OPERATIONS,
+            )
+        )
+
+        operations = (
+            _normalize_permission_values(
+                values
+            )
+        )
+
+        allowed = set(
+            actor_permissions.get(
+                key,
+                [],
+            )
+        )
+
+        forbidden = [
+            operation
+            for operation in operations
+            if operation
+            not in allowed
+        ]
+
+        if forbidden:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "You can only grant permissions "
+                    "that are available to your own account"
+                ),
+            )
+
+        result[key] = operations
+
+    return result
+
+
 @users_router.get("")
 async def list_users(
     user: dict = Depends(
@@ -476,6 +703,20 @@ class RoleBody(BaseModel):
 class MenuAccessBody(BaseModel):
     menu_access: list[str] = Field(
         default_factory=list
+    )
+
+
+class MenuPermissionsBody(
+    BaseModel
+):
+    menu_access: list[str] = Field(
+        default_factory=list
+    )
+    menu_permissions: dict[
+        str,
+        list[str],
+    ] = Field(
+        default_factory=dict
     )
 
 
@@ -825,6 +1066,128 @@ async def set_menu_access(
     }
 
 
+@users_router.patch(
+    "/{user_id}/permissions"
+)
+async def set_menu_permissions(
+    user_id: str,
+    body: MenuPermissionsBody,
+    user: dict = Depends(
+        require_roles(
+            "admin"
+        )
+    ),
+):
+    if user_id == user["id"]:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot change your own "
+                "access permissions"
+            ),
+        )
+
+    target = await db.users.find_one(
+        {"id": user_id}
+    )
+
+    if not target:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    if not _can_manage_target(
+        user,
+        target,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "You cannot manage a user "
+                "at this role level"
+            ),
+        )
+
+    if (
+        _effective_role(target)
+        == "master_admin"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Master Admin permissions "
+                "are always unrestricted"
+            ),
+        )
+
+    access = (
+        _validate_delegated_menu_access(
+            user,
+            body.menu_access,
+        )
+    )
+
+    current_permissions = (
+        normalize_menu_permissions(
+            target
+        )
+    )
+
+    merged = {
+        **current_permissions,
+        **(
+            body.menu_permissions
+            or {}
+        ),
+    }
+
+    permissions = (
+        _validate_delegated_menu_permissions(
+            user,
+            access,
+            merged,
+        )
+    )
+
+    updated = (
+        await db.users.find_one_and_update(
+            {"id": user_id},
+            {
+                "$set": {
+                    "menu_access": access,
+                    "menu_permissions":
+                        permissions,
+                }
+            },
+            return_document=(
+                ReturnDocument.AFTER
+            ),
+        )
+    )
+
+    await audit_log(
+        "user",
+        user_id,
+        "user.menu_permissions",
+        user,
+        (
+            "Updated menu permissions; "
+            "Inventory="
+            + ",".join(
+                permissions.get(
+                    "inv",
+                    [],
+                )
+            )
+        ),
+    )
+
+    return public_user(
+        updated
+    )
+
+
 class NewUserBody(BaseModel):
     email: EmailStr
     name: str
@@ -839,6 +1202,10 @@ class NewUserBody(BaseModel):
             MENU_KEYS
         )
     )
+    menu_permissions: dict[
+        str,
+        list[str],
+    ] | None = None
 
 
 @users_router.post("")
@@ -935,6 +1302,35 @@ async def create_user(
             )
         )
 
+    explicit_permissions = None
+
+    if (
+        body.menu_permissions
+        is not None
+    ):
+        if (
+            user.get("role")
+            not in (
+                "master_admin",
+                "admin",
+            )
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Only Master Admin and Admin "
+                    "can set granular permissions"
+                ),
+            )
+
+        explicit_permissions = (
+            _validate_delegated_menu_permissions(
+                user,
+                menu_access,
+                body.menu_permissions,
+            )
+        )
+
     uid = new_id()
 
     doc = {
@@ -950,6 +1346,11 @@ async def create_user(
         "picture": None,
         "created_at": now_iso(),
     }
+
+    if explicit_permissions is not None:
+        doc["menu_permissions"] = (
+            explicit_permissions
+        )
 
     if profile:
         doc["role_profile_id"] = (

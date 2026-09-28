@@ -7,6 +7,28 @@
   },
   "versions": [
     {
+      "version": "1.2.0",
+      "status": "stable",
+      "title": "Category Cabinet QR & Granular Inventory Permissions",
+      "summary": "Added one secure public Inventory QR per category/cabinet and granular per-user Inventory permissions for View, Add, Edit/Adjust, Delete, and Public QR management.",
+      "changes": [
+        "Each Inventory category now has its own stable QR/Public Link for a physical cabinet.",
+        "A new Inventory category automatically receives a new category QR link.",
+        "Inventory QR management shows one View QR / Public Link action per category instead of one all-inventory QR.",
+        "Each category public page is permanently scoped to that category and cannot switch to another category.",
+        "Category public pages support search, Type, Stock Status, Storage Location, and sorting.",
+        "Public category Excel/PDF exports keep the selected category scope and use the full Inventory report format including Unit Price and Stock Value.",
+        "Category QR links can be copied, opened, reset, disabled, enabled, and downloaded as printable cabinet labels.",
+        "Resetting one category link revokes only that category QR and does not affect other cabinets.",
+        "Inventory menu access now defaults to full Inventory operations regardless of built-in/custom base role, preserving Storekeeper-style workflows.",
+        "Master Admin and Admin can set per-user Inventory permissions: View, Add, Edit/Adjust, Delete, and Public QR.",
+        "Inventory backend endpoints enforce the granular permissions, not only frontend button visibility.",
+        "Inventory report export requires Inventory View permission.",
+        "Users without explicit granular settings remain backward compatible: an existing Inventory menu assignment grants all Inventory operations by default.",
+        "Tracked updater now normalizes harmless Base64 whitespace before strict digital-signature verification to prevent CRM line-wrap failures."
+      ]
+    },
+    {
       "version": "1.1.14",
       "status": "stable",
       "title": "Public Inventory UX & PDF Metadata Fixes",

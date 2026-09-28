@@ -32,6 +32,7 @@ import VersionHistory from "@/pages/VersionHistory";
 import RoleProfiles from "@/pages/RoleProfiles";
 import PublicEquipment from "@/pages/PublicEquipment";
 import PublicInventory from "@/pages/PublicInventory";
+import PublicInventoryCategory from "@/pages/PublicInventoryCategory";
 
 function FullLoader() {
   return (
@@ -107,6 +108,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/q/e/:token" element={<PublicEquipment />} />
       <Route path="/q/inventory/:token" element={<PublicInventory />} />
+      <Route path="/q/inventory-category/:token" element={<PublicInventoryCategory />} />
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<Protected menu="dash"><Dashboard /></Protected>} />
       <Route path="/equipment" element={<Protected menu="eq"><EquipmentList /></Protected>} />
