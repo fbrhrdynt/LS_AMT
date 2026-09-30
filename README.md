@@ -241,7 +241,18 @@ Custom `master_admin` profiles are intentionally not supported.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.2.1**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.2.2**.
+
+### 1.2.2 - Updater Signature Recovery & Release Integrity
+
+- Fixed automatic update failures caused by truncated or incomplete RSA-3072 signature metadata from CRM/API.
+- Updater validates decoded signature length against the installed RSA public key.
+- If CRM/API signature metadata is incomplete or fails verification, updater retries using `signature-base64.txt` from the same approved release directory.
+- Canonical signature fallback is restricted to HTTPS on `release.logisourcedigital.web.id`.
+- SHA256 package verification and RSA public-key signature verification remain mandatory.
+- No signature-verification bypass was introduced.
+- No database migration is required.
+- Application restart is required after update.
 
 ### 1.2.1 - Compact Category QR Manager & Direct PDF Links
 
