@@ -179,33 +179,141 @@ def download_package(url, target):
             shutil.copyfileobj(response, out, length=1024 * 1024)
 
 
-def verify_signature(package, signature_b64):
-    if not PUBLIC_KEY.is_file():
-        raise RuntimeError(f"Public release key not found: {PUBLIC_KEY}")
-
-    signature = STATE_ROOT / "release.sig"
-
-    signature_b64 = "".join(
-        str(
-            signature_b64
-            or ""
-        ).split()
+def _expected_signature_bytes():
+    result = run(
+        [
+            "/usr/bin/openssl",
+            "pkey",
+            "-pubin",
+            "-in",
+            str(PUBLIC_KEY),
+            "-text",
+            "-noout",
+        ],
+        check=False,
     )
 
-    if not signature_b64:
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Could not inspect release public key"
+        )
+
+    match = re.search(
+        r"Public-Key:\s*\((\d+)\s*bit\)",
+        result.stdout,
+    )
+
+    if not match:
+        raise RuntimeError(
+            "Could not determine RSA public key size"
+        )
+
+    bits = int(match.group(1))
+
+    if bits <= 0 or bits % 8:
+        raise RuntimeError(
+            f"Invalid RSA public key size: {bits}"
+        )
+
+    return bits // 8
+
+
+def _decode_signature_b64(value):
+    value = "".join(
+        str(value or "").split()
+    )
+
+    if not value:
         raise RuntimeError(
             "Release signature is empty"
         )
 
     try:
         raw = base64.b64decode(
-            signature_b64,
+            value,
             validate=True,
         )
     except Exception as exc:
         raise RuntimeError(
             "Release signature is not valid Base64"
         ) from exc
+
+    return value, raw
+
+
+def _canonical_signature_url(package_url):
+    parsed = urlparse(package_url)
+
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != RELEASE_HOST
+    ):
+        raise RuntimeError(
+            "Canonical signature must use approved release host"
+        )
+
+    directory = parsed.path.rsplit("/", 1)[0]
+
+    return parsed._replace(
+        path=(
+            directory
+            + "/signature-base64.txt"
+        ),
+        params="",
+        query="",
+        fragment="",
+    ).geturl()
+
+
+def _download_canonical_signature(package_url):
+    url = _canonical_signature_url(
+        package_url
+    )
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent":
+                "LogiSource-AMT-Updater/1.2.2",
+            "Accept":
+                "text/plain,*/*;q=0.1",
+            "Cache-Control":
+                "no-cache",
+        },
+    )
+
+    with urllib.request.urlopen(
+        request,
+        timeout=30,
+    ) as response:
+
+        final = urlparse(
+            response.geturl()
+        )
+
+        if (
+            final.scheme != "https"
+            or final.hostname
+            != RELEASE_HOST
+        ):
+            raise RuntimeError(
+                "Signature download redirected "
+                "outside approved release host"
+            )
+
+        return response.read().decode(
+            "ascii"
+        )
+
+
+def _verify_raw_signature(
+    package,
+    raw,
+):
+    signature = (
+        STATE_ROOT
+        / "release.sig"
+    )
 
     signature.write_bytes(raw)
     os.chmod(signature, 0o600)
@@ -223,8 +331,111 @@ def verify_signature(package, signature_b64):
         ],
         check=False,
     )
-    if result.returncode != 0 or "Verified OK" not in result.stdout:
-        raise RuntimeError("Digital signature verification failed")
+
+    return (
+        result.returncode == 0
+        and "Verified OK"
+        in result.stdout
+    )
+
+
+def verify_signature(
+    package,
+    signature_b64,
+    package_url,
+):
+    if not PUBLIC_KEY.is_file():
+        raise RuntimeError(
+            f"Public release key not found: "
+            f"{PUBLIC_KEY}"
+        )
+
+    expected = (
+        _expected_signature_bytes()
+    )
+
+    errors = []
+
+    # --------------------------------------------------------
+    # FIRST: CRM/API SIGNATURE
+    # --------------------------------------------------------
+
+    try:
+        clean, raw = (
+            _decode_signature_b64(
+                signature_b64
+            )
+        )
+
+        if len(raw) != expected:
+            raise RuntimeError(
+                "CRM/API signature has "
+                f"{len(raw)} bytes; "
+                f"expected {expected} bytes "
+                f"(Base64 chars={len(clean)})"
+            )
+
+        if _verify_raw_signature(
+            package,
+            raw,
+        ):
+            return
+
+        errors.append(
+            "CRM/API signature failed "
+            "cryptographic verification"
+        )
+
+    except Exception as exc:
+        errors.append(
+            "CRM/API: " + str(exc)
+        )
+
+    # --------------------------------------------------------
+    # FALLBACK: CANONICAL RELEASE SERVER SIGNATURE
+    # --------------------------------------------------------
+
+    try:
+        canonical = (
+            _download_canonical_signature(
+                package_url
+            )
+        )
+
+        clean, raw = (
+            _decode_signature_b64(
+                canonical
+            )
+        )
+
+        if len(raw) != expected:
+            raise RuntimeError(
+                "Canonical signature has "
+                f"{len(raw)} bytes; "
+                f"expected {expected} bytes "
+                f"(Base64 chars={len(clean)})"
+            )
+
+        if _verify_raw_signature(
+            package,
+            raw,
+        ):
+            return
+
+        errors.append(
+            "Release-server signature failed "
+            "cryptographic verification"
+        )
+
+    except Exception as exc:
+        errors.append(
+            "Release server: " + str(exc)
+        )
+
+    raise RuntimeError(
+        "Digital signature verification failed. "
+        + " | ".join(errors)
+    )
 
 
 def excluded_member(name):
@@ -474,7 +685,11 @@ def main():
                 "Verifying digital signature",
                 target_version=target_version,
             )
-            verify_signature(package, request["signature"])
+            verify_signature(
+                package,
+                request["signature"],
+                request["package_url"],
+            )
 
             with tempfile.TemporaryDirectory(prefix="amt-update-") as temp:
                 extracted = Path(temp)

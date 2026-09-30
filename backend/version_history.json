@@ -7,6 +7,23 @@
   },
   "versions": [
     {
+      "version": "1.2.2",
+      "status": "stable",
+      "title": "Updater Signature Recovery & Release Integrity",
+      "summary": "Fixed automatic update failures caused by incomplete release-signature metadata and added secure recovery from the canonical LogiSource release server.",
+      "changes": [
+        "Fixed automatic update failures caused by truncated or incomplete RSA-3072 signature metadata from CRM/API.",
+        "Updater now validates decoded signature length against the installed RSA public key.",
+        "When CRM/API signature metadata is invalid, incomplete, or fails verification, updater retries with signature-base64.txt from the same approved release directory as the package.",
+        "Canonical signature fallback is restricted to HTTPS on release.logisourcedigital.web.id.",
+        "Canonical fallback is still cryptographically verified with the installed RSA public key; no signature verification bypass was introduced.",
+        "SHA256 package verification remains mandatory before digital-signature verification.",
+        "Improved updater diagnostics for invalid or incomplete release signatures.",
+        "No database migration is required.",
+        "Application restart is required after update."
+      ]
+    },
+    {
       "version": "1.2.1",
       "status": "stable",
       "title": "Compact Category QR Manager & Direct PDF Links",
