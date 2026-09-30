@@ -7,6 +7,25 @@
   },
   "versions": [
     {
+      "version": "1.2.1",
+      "status": "stable",
+      "title": "Compact Category QR Manager & Direct PDF Links",
+      "summary": "Refined the Inventory category QR interface for large category lists and changed category QR/Public Links to deliver the category PDF directly.",
+      "changes": [
+        "Inventory QR/Public Link by Category is collapsed by default behind one View QR Public Link Category action.",
+        "The category list appears only after the section is opened.",
+        "Category details and QR/link actions appear only after a category is selected.",
+        "The category list uses a bounded scroll area so large installations do not expand the Inventory page excessively.",
+        "Added category search for installations with many Inventory categories.",
+        "Only one category detail panel can be open at a time.",
+        "Category QR codes now point directly to the branded Inventory PDF for that category.",
+        "Open Public Link now opens/downloads the selected category PDF directly instead of opening the public HTML page.",
+        "Copy Link now copies the direct public category PDF link.",
+        "Existing signed-token, reset, disable/enable, and rate-limit protections remain in place.",
+        "No database migration is required."
+      ]
+    },
+    {
       "version": "1.2.0",
       "status": "stable",
       "title": "Category Cabinet QR & Granular Inventory Permissions",

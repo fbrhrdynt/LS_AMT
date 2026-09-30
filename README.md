@@ -241,7 +241,19 @@ Custom `master_admin` profiles are intentionally not supported.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.2.0**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.2.1**.
+
+### 1.2.1 - Compact Category QR Manager & Direct PDF Links
+
+- Inventory category QR management is collapsed behind **View QR Public Link Category**.
+- Category rows are shown only when the section is opened.
+- QR/link details are shown only for the currently selected category.
+- Category search and a bounded scroll area keep the page compact even with many categories.
+- Category QR codes now open the branded **Inventory PDF for that category directly**.
+- **Open Public Link** opens/downloads the selected category PDF instead of the public HTML page.
+- **Copy Link** copies the direct signed category PDF URL.
+- Existing token, reset, disable/enable, and rate-limit protections remain in place.
+- No database migration is required.
 
 ### 1.2.0 - Category Cabinet QR & Granular Inventory Permissions
 

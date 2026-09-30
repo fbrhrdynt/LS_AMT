@@ -78,9 +78,11 @@ def _public_token(token_id: str) -> str:
 
 
 def _public_url(token_id: str) -> str:
+    token = _public_token(token_id)
+
     return (
-        f"{PUBLIC_BASE_URL}/q/inventory-category/"
-        f"{_public_token(token_id)}"
+        f"{PUBLIC_BASE_URL}/api/public/inventory-category/"
+        f"{token}/export.pdf?download=true"
     )
 
 
@@ -1127,6 +1129,7 @@ async def public_inventory_category_xlsx(
 async def public_inventory_category_pdf(
     token: str,
     request: Request,
+    download: bool = Query(False),
     q: str = Query(
         "",
         max_length=100,
@@ -1189,13 +1192,19 @@ async def public_inventory_category_pdf(
         link["category"]
     )
 
+    disposition = (
+        "attachment"
+        if download
+        else "inline"
+    )
+
     return Response(
         content=data,
         media_type="application/pdf",
         headers={
             **PUBLIC_HEADERS,
             "Content-Disposition": (
-                f'inline; filename="amt-inventory-{name}.pdf"'
+                f'{disposition}; filename="amt-inventory-{name}.pdf"'
             ),
         },
     )
