@@ -17,6 +17,8 @@ function canAttemptRefresh(config) {
     "/auth/login",
     "/auth/logout",
     "/auth/refresh",
+    "/auth/password-reset/request",
+    "/auth/password-reset/confirm",
   ].some((path) => url.includes(path));
 }
 

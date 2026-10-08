@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { useAuth, formatApiError } from "@/context/AuthContext";
@@ -71,6 +71,15 @@ export default function Login() {
               <input data-testid="login-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
                 className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="••••••••" />
+            </div>
+            <div className="flex justify-end">
+              <Link
+                to="/forgot-password"
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                data-testid="forgot-password-link"
+              >
+                Forgot password?
+              </Link>
             </div>
             <button data-testid="login-submit" type="submit" disabled={loading}
               className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors">

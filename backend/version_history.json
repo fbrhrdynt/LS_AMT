@@ -7,6 +7,29 @@
   },
   "versions": [
     {
+      "version": "1.3.0",
+      "status": "stable",
+      "title": "Secure Email Password Reset",
+      "summary": "Added a secure self-service password reset flow from the AMT sign-in page using one-time email links, current company branding, and session revocation after credential changes.",
+      "changes": [
+        "Added Forgot password? to the AMT sign-in page.",
+        "Users can request a password reset link using their registered AMT email address.",
+        "Public reset-request responses do not reveal whether an email address exists in AMT.",
+        "Reset links use high-entropy one-time tokens; only SHA-256 token hashes are stored in MongoDB.",
+        "Reset links expire after 30 minutes by default and newer requests supersede older unused links.",
+        "Password reset requests are rate-limited by hashed email identifier and requester IP.",
+        "Password reset emails use a responsive HTML template with plain-text fallback.",
+        "Email branding embeds the current configured company logo and retains Powered by LogiSource Digital.",
+        "Password reset email replies are directed to LogiSource Digital support.",
+        "Resetting a password requires at least 12 characters and rejects reuse of the current password.",
+        "A successful password reset revokes all existing AMT sessions for that user.",
+        "Existing login lockouts for the reset account are cleared after a successful password change.",
+        "SMTP credentials remain runtime-only in backend/.env and are not stored in Git or the signed release package.",
+        "No manual database migration is required; required MongoDB indexes are created automatically at backend startup.",
+        "Application restart is required after update."
+      ]
+    },
+    {
       "version": "1.2.2",
       "status": "stable",
       "title": "Updater Signature Recovery & Release Integrity",

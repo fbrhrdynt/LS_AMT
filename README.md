@@ -239,9 +239,43 @@ Custom `master_admin` profiles are intentionally not supported.
 
 ---
 
+### Password Reset
+
+- Self-service **Forgot password?** flow from the sign-in page
+- Registered users receive a one-time reset link by email
+- Reset tokens are high entropy and stored only as SHA-256 hashes
+- Reset links expire after 30 minutes by default
+- New reset requests supersede older unused reset links
+- Public reset requests use a generic response to reduce account-enumeration risk
+- Request rate limiting is applied by hashed email identifier and requester IP
+- Password-reset emails use the current configured company logo
+- HTML and plain-text email formats are both provided
+- Email replies are directed to LogiSource Digital support
+- Successful password changes revoke all existing AMT sessions for that user
+- SMTP credentials remain in runtime `backend/.env` and are excluded from Git/release archives
+
+---
+
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.2.2**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.3.0**.
+
+### 1.3.0 - Secure Email Password Reset
+
+- Added **Forgot password?** to the AMT sign-in page.
+- Registered users can request a secure one-time password reset link by email.
+- Reset-request responses do not disclose whether an account exists.
+- Reset tokens are high entropy and only their SHA-256 hashes are stored.
+- Reset links expire after 30 minutes by default and newer requests supersede older unused links.
+- Reset requests are rate-limited by hashed email identifier and requester IP.
+- Reset emails use a responsive HTML template plus plain-text fallback.
+- The email embeds the current configured company logo and keeps **Powered by LogiSource Digital**.
+- Replies are directed to LogiSource Digital support.
+- New passwords require at least 12 characters and cannot reuse the current password.
+- A successful reset revokes all existing sessions for the affected user.
+- SMTP secrets remain runtime-only in `backend/.env` and are excluded from Git and signed releases.
+- Required MongoDB indexes are created automatically; no manual database migration is required.
+- Application restart is required after update.
 
 ### 1.2.2 - Updater Signature Recovery & Release Integrity
 

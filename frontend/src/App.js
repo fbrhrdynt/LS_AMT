@@ -14,6 +14,8 @@ import {
 import { CurrencyProvider } from "@/context/CurrencyContext";
 import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
 import EquipmentList from "@/pages/EquipmentList";
 import EquipmentDetail from "@/pages/EquipmentDetail";
@@ -110,6 +112,8 @@ function AppRoutes() {
       <Route path="/q/inventory/:token" element={<PublicInventory />} />
       <Route path="/q/inventory-category/:token" element={<PublicInventoryCategory />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/" element={<Protected menu="dash"><Dashboard /></Protected>} />
       <Route path="/equipment" element={<Protected menu="eq"><EquipmentList /></Protected>} />
       <Route path="/equipment/:id" element={<Protected menu="eq"><EquipmentDetail /></Protected>} />

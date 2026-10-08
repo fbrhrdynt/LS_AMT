@@ -9,6 +9,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from core import db
 from auth import auth_router, users_router, seed_admin
+from password_reset import router as password_reset_router
 from equipment_routes import router as equipment_router
 from maintenance_routes import router as maintenance_router
 from inventory_routes import router as inventory_router
@@ -121,6 +122,7 @@ async def root():
 
 
 app.include_router(auth_router)
+app.include_router(password_reset_router)
 app.include_router(users_router)
 app.include_router(equipment_router)
 app.include_router(maintenance_router)
@@ -180,6 +182,32 @@ async def _ensure_indexes():
     await db.auth_sessions.create_index("expires_at", expireAfterSeconds=0, name="ttl_auth_sessions")
     await db.login_attempts.create_index("identifier", name="idx_login_identifier")
     await db.login_attempts.create_index("locked_until", expireAfterSeconds=3600, name="ttl_login_attempts")
+
+    await db.password_reset_tokens.create_index(
+        "id", unique=True, name="uniq_password_reset_id"
+    )
+    await db.password_reset_tokens.create_index(
+        "token_hash", unique=True, name="uniq_password_reset_token"
+    )
+    await db.password_reset_tokens.create_index(
+        "expires_at", expireAfterSeconds=0, name="ttl_password_reset_tokens"
+    )
+    await db.password_reset_tokens.create_index(
+        [("email", 1), ("created_at", -1)], name="idx_password_reset_email"
+    )
+    await db.password_reset_tokens.create_index(
+        [("requested_ip", 1), ("created_at", -1)], name="idx_password_reset_ip"
+    )
+
+    await db.password_reset_attempts.create_index(
+        "expires_at", expireAfterSeconds=0, name="ttl_password_reset_attempts"
+    )
+    await db.password_reset_attempts.create_index(
+        [("email_hash", 1), ("created_at", -1)], name="idx_password_reset_attempt_email"
+    )
+    await db.password_reset_attempts.create_index(
+        [("requested_ip", 1), ("created_at", -1)], name="idx_password_reset_attempt_ip"
+    )
 
     await db.equipment.create_index(
         "id", unique=True, name="uniq_equipment_id",
