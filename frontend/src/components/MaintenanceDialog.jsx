@@ -13,15 +13,15 @@ import { useCurrency } from "@/context/CurrencyContext";
 
 const MNT_TYPES = [
   "Preventive",
-  "Corrective",
   "Breakdown",
   "Inspection",
 ];
 
 const CATEGORIES = [
   "Pre-Job",
-  "Major Repair",
   "Post-Job",
+  "Major Repair",
+  "Corrective",
 ];
 
 const normalizeParts = (rows = []) =>
@@ -80,7 +80,7 @@ export default function MaintenanceDialog({
     } else if (mode === "edit" && maintenance) {
       setForm({
         maintenance_date: maintenance.maintenance_date || "",
-        type_of_maintenance: maintenance.type_of_maintenance || "Corrective",
+        type_of_maintenance: maintenance.type_of_maintenance || "Preventive",
         maintenance_category:
           maintenance.maintenance_category || "Pre-Job",
         problem_damage: maintenance.problem_damage || "",
@@ -103,7 +103,7 @@ export default function MaintenanceDialog({
     } else {
       setForm({
         maintenance_date: new Date().toISOString().slice(0, 10),
-        type_of_maintenance: "Corrective",
+        type_of_maintenance: "Preventive",
         maintenance_category: "Pre-Job",
         problem_damage: "",
         failure_found: "",
@@ -366,7 +366,7 @@ export default function MaintenanceDialog({
               </SelectInput>
 
               <SelectInput
-                label="Category"
+                label="Category Maintenance"
                 value={form.maintenance_category}
                 onChange={(e) =>
                   setForm({

@@ -125,6 +125,8 @@ async def report_maintenance(
     date_from: str = "",
     date_to: str = "",
     type: str = "",
+    maintenance_category: str = "",
+    equipment_category: str = "",
     technician: str = "",
     failure: str = "",
     client_id: str = "",
@@ -138,7 +140,9 @@ async def report_maintenance(
     if sap_no:
         query["sap_no"] = {"$regex": re.escape(sap_no), "$options": "i"}
     if type:
-        query["type_of_maintenance"] = {"$regex": re.escape(type), "$options": "i"}
+        query["type_of_maintenance"] = type
+    if maintenance_category:
+        query["maintenance_category"] = maintenance_category
     if technician:
         escaped = re.escape(technician)
         query["$or"] = [
@@ -165,13 +169,24 @@ async def report_maintenance(
         query, {"_id": 0}
     ).sort("maintenance_date", -1).to_list(5000)
 
-    if serial_no:
+    if serial_no or equipment_category:
+        equipment_query = {}
+        if serial_no:
+            equipment_query["mfg_no"] = {
+                "$regex": re.escape(serial_no),
+                "$options": "i",
+            }
+        if equipment_category:
+            equipment_query["category"] = equipment_category
         eqs = await db.equipment.find(
-            {"mfg_no": {"$regex": re.escape(serial_no), "$options": "i"}},
+            equipment_query,
             {"_id": 0, "id": 1},
         ).to_list(2000)
         ids = {item["id"] for item in eqs}
-        rows = [row for row in rows if row.get("equipment_id") in ids]
+        rows = [
+            row for row in rows
+            if row.get("equipment_id") in ids
+        ]
 
     return {"total": len(rows), "items": rows}
 
@@ -216,6 +231,8 @@ async def _report_for_export(
     date_from="",
     date_to="",
     type="",
+    maintenance_category="",
+    equipment_category="",
     technician="",
     failure="",
     client_id="",
@@ -229,6 +246,8 @@ async def _report_for_export(
         date_from=date_from,
         date_to=date_to,
         type=type,
+        maintenance_category=maintenance_category,
+        equipment_category=equipment_category,
         technician=technician,
         failure=failure,
         client_id=client_id,
@@ -246,6 +265,8 @@ async def export_csv(
     date_from: str = "",
     date_to: str = "",
     type: str = "",
+    maintenance_category: str = "",
+    equipment_category: str = "",
     technician: str = "",
     failure: str = "",
     client_id: str = "",
@@ -254,17 +275,19 @@ async def export_csv(
 ):
     result = await _report_for_export(
         user,
-        equipment_id,
-        sap_no,
-        serial_no,
-        status,
-        date_from,
-        date_to,
-        type,
-        technician,
-        failure,
-        client_id,
-        job_id,
+        equipment_id=equipment_id,
+        sap_no=sap_no,
+        serial_no=serial_no,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        type=type,
+        maintenance_category=maintenance_category,
+        equipment_category=equipment_category,
+        technician=technician,
+        failure=failure,
+        client_id=client_id,
+        job_id=job_id,
     )
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -288,6 +311,8 @@ async def export_xlsx(
     date_from: str = "",
     date_to: str = "",
     type: str = "",
+    maintenance_category: str = "",
+    equipment_category: str = "",
     technician: str = "",
     failure: str = "",
     client_id: str = "",
@@ -296,17 +321,19 @@ async def export_xlsx(
 ):
     result = await _report_for_export(
         user,
-        equipment_id,
-        sap_no,
-        serial_no,
-        status,
-        date_from,
-        date_to,
-        type,
-        technician,
-        failure,
-        client_id,
-        job_id,
+        equipment_id=equipment_id,
+        sap_no=sap_no,
+        serial_no=serial_no,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        type=type,
+        maintenance_category=maintenance_category,
+        equipment_category=equipment_category,
+        technician=technician,
+        failure=failure,
+        client_id=client_id,
+        job_id=job_id,
     )
 
     wb = openpyxl.Workbook()

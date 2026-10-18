@@ -258,7 +258,18 @@ Custom `master_admin` profiles are intentionally not supported.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.3.0**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.4.0**.
+
+### 1.4.0 - Maintenance Classification & Searchable Report Filters
+
+- Type of Maintenance now offers **Preventive, Breakdown, Inspection**.
+- Category Maintenance now offers **Pre-Job, Post-Job, Major Repair, Corrective**.
+- New maintenance records default to **Preventive**.
+- Reports now supports searchable dropdowns for **Type of Maintenance**, **Category Maintenance**, and **Category Equipment**.
+- Equipment categories are populated from the Equipment registry.
+- Report filters also apply to maintenance Excel/PDF exports and selected-row exports.
+- Historical maintenance records remain unchanged; no database migration is required.
+- Application restart is required after update.
 
 ### 1.3.0 - Secure Email Password Reset
 

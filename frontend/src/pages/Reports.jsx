@@ -18,6 +18,21 @@ import {
 } from "@/components/Bits";
 import { StatusBadge } from "@/components/StatusBadge";
 import { fmtDate } from "@/lib/helpers";
+import SearchableSelect from "@/components/SearchableSelect";
+
+
+const MAINTENANCE_TYPES = [
+  "Preventive",
+  "Breakdown",
+  "Inspection",
+];
+
+const MAINTENANCE_CATEGORIES = [
+  "Pre-Job",
+  "Post-Job",
+  "Major Repair",
+  "Corrective",
+];
 
 
 export default function Reports() {
@@ -25,12 +40,18 @@ export default function Reports() {
 
   const [clients, setClients] = useState([]);
   const [jobs, setJobs] = useState([]);
+  const [
+    equipmentCategories,
+    setEquipmentCategories,
+  ] = useState([]);
 
   const [f, setF] = useState({
     sap_no: "",
     serial_no: "",
     technician: "",
     type: "",
+    maintenance_category: "",
+    equipment_category: "",
     failure: "",
     client_id: "",
     job_id: "",
@@ -60,6 +81,24 @@ export default function Reports() {
       .get("/jobs")
       .then((response) =>
         setJobs(response.data)
+      );
+
+    api
+      .get("/equipment/categories")
+      .then((response) =>
+        setEquipmentCategories(
+          (response.data || [])
+            .map((value) =>
+              String(value || "").trim()
+            )
+            .filter(Boolean)
+            .sort((a, b) =>
+              a.localeCompare(b)
+            )
+        )
+      )
+      .catch(() =>
+        setEquipmentCategories([])
       );
   }, []);
 
@@ -251,15 +290,52 @@ export default function Reports() {
             }
           />
 
-          <TextInput
-            label="Maintenance Type"
+          <SearchableSelect
+            label="Type of Maintenance"
             value={f.type}
-            onChange={(e) =>
+            onChange={(value) =>
               setF({
                 ...f,
-                type: e.target.value,
+                type: value,
               })
             }
+            options={MAINTENANCE_TYPES}
+            allLabel="All"
+            searchPlaceholder="Search maintenance type…"
+            emptyText="No matching maintenance type."
+            testId="report-filter-maintenance-type"
+          />
+
+          <SearchableSelect
+            label="Category Maintenance"
+            value={f.maintenance_category}
+            onChange={(value) =>
+              setF({
+                ...f,
+                maintenance_category: value,
+              })
+            }
+            options={MAINTENANCE_CATEGORIES}
+            allLabel="All"
+            searchPlaceholder="Search maintenance category…"
+            emptyText="No matching maintenance category."
+            testId="report-filter-maintenance-category"
+          />
+
+          <SearchableSelect
+            label="Category Equipment"
+            value={f.equipment_category}
+            onChange={(value) =>
+              setF({
+                ...f,
+                equipment_category: value,
+              })
+            }
+            options={equipmentCategories}
+            allLabel="All"
+            searchPlaceholder="Search equipment category…"
+            emptyText="No matching equipment category."
+            testId="report-filter-equipment-category"
           />
 
           <TextInput

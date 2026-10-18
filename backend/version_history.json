@@ -7,6 +7,23 @@
   },
   "versions": [
     {
+      "version": "1.4.0",
+      "status": "stable",
+      "title": "Maintenance Classification & Searchable Report Filters",
+      "summary": "Updated maintenance types and categories and added searchable report filters for maintenance type, maintenance category, and equipment category.",
+      "changes": [
+        "Type of Maintenance choices: Preventive, Breakdown, Inspection.",
+        "Category Maintenance choices: Pre-Job, Post-Job, Major Repair, Corrective.",
+        "New Maintenance records default to Preventive.",
+        "Reports uses searchable dropdowns for Type of Maintenance, Category Maintenance, and Category Equipment.",
+        "Equipment category options load dynamically from the Equipment registry.",
+        "Reports view, maintenance Excel/PDF exports, and selected-row exports share these filters.",
+        "Historical maintenance values are preserved without modifying records.",
+        "No database migration is required.",
+        "Application restart is required after update."
+      ]
+    },
+    {
       "version": "1.3.0",
       "status": "stable",
       "title": "Secure Email Password Reset",

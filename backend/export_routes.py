@@ -160,7 +160,9 @@ async def _maintenance_rows(params):
     if params.get("sap_no"):
         query["sap_no"] = {"$regex": params["sap_no"], "$options": "i"}
     if params.get("type"):
-        query["type_of_maintenance"] = {"$regex": params["type"], "$options": "i"}
+        query["type_of_maintenance"] = params["type"]
+    if params.get("maintenance_category"):
+        query["maintenance_category"] = params["maintenance_category"]
     if params.get("failure"):
         query["failure_found"] = {"$regex": params["failure"], "$options": "i"}
     if params.get("technician"):
@@ -179,12 +181,21 @@ async def _maintenance_rows(params):
 
     records = await db.maintenance.find(query, {"_id": 0}).sort("maintenance_date", -1).to_list(100000)
 
-    if params.get("serial_no"):
+    if params.get("serial_no") or params.get("equipment_category"):
+        equipment_query = {}
+        if params.get("serial_no"):
+            equipment_query["mfg_no"] = _rx(params["serial_no"])
+        if params.get("equipment_category"):
+            equipment_query["category"] = params["equipment_category"]
         eqs = await db.equipment.find(
-            {"mfg_no": {"$regex": params["serial_no"], "$options": "i"}}, {"_id": 0, "id": 1}
+            equipment_query,
+            {"_id": 0, "id": 1},
         ).to_list(10000)
-        ids = {e["id"] for e in eqs}
-        records = [m for m in records if m.get("equipment_id") in ids]
+        ids = {equipment["id"] for equipment in eqs}
+        records = [
+            maintenance for maintenance in records
+            if maintenance.get("equipment_id") in ids
+        ]
 
     rows = []
     for m in records:
@@ -1073,6 +1084,7 @@ async def export_xlsx(
     category: str = "", low: str = "", stock_status: str = "", storage_location: str = "",
     entity_type: str = "", sap_no: str = "", serial_no: str = "",
     technician: str = "", failure: str = "", client_id: str = "", job_id: str = "",
+    maintenance_category: str = "", equipment_category: str = "",
     date_from: str = "", date_to: str = "", maintenance_ids: str = "",
     user: dict = Depends(get_current_user),
 ):
@@ -1097,7 +1109,9 @@ async def export_xlsx(
                      stock_status=stock_status, storage_location=storage_location,
                      entity_type=entity_type, sap_no=sap_no, serial_no=serial_no,
                      technician=technician, failure=failure, client_id=client_id,
-                     job_id=job_id, date_from=date_from, date_to=date_to,
+                     job_id=job_id, maintenance_category=maintenance_category,
+                     equipment_category=equipment_category,
+                     date_from=date_from, date_to=date_to,
                      maintenance_ids=maintenance_ids)
     headers, rows = await _dataset(dataset, params, user)
     brand_logo = (
@@ -1123,6 +1137,7 @@ async def export_pdf(
     category: str = "", low: str = "", stock_status: str = "", storage_location: str = "",
     entity_type: str = "", sap_no: str = "", serial_no: str = "",
     technician: str = "", failure: str = "", client_id: str = "", job_id: str = "",
+    maintenance_category: str = "", equipment_category: str = "",
     date_from: str = "", date_to: str = "", maintenance_ids: str = "",
     user: dict = Depends(get_current_user),
 ):
@@ -1147,7 +1162,9 @@ async def export_pdf(
                      stock_status=stock_status, storage_location=storage_location,
                      entity_type=entity_type, sap_no=sap_no, serial_no=serial_no,
                      technician=technician, failure=failure, client_id=client_id,
-                     job_id=job_id, date_from=date_from, date_to=date_to,
+                     job_id=job_id, maintenance_category=maintenance_category,
+                     equipment_category=equipment_category,
+                     date_from=date_from, date_to=date_to,
                      maintenance_ids=maintenance_ids)
     headers, rows = await _dataset(dataset, params, user)
     brand_logo = (
