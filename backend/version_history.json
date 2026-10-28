@@ -7,6 +7,23 @@
   },
   "versions": [
     {
+      "version": "1.5.0",
+      "status": "stable",
+      "title": "Maintenance Supply Source Options",
+      "summary": "Added 9001 Source and Expenses to Maintenance spare parts supply sources with tracked direct-use values and stock-safe reversal behavior.",
+      "changes": [
+        "Added 9001 Source and Expenses in Maintenance > Spare Parts & Materials > Source.",
+        "Both new sources record direct-use material transactions without deducting Inventory stock.",
+        "Recorded catalog values are included in maintenance totals and maintenance PDF/Excel exports.",
+        "9001 Source and Expenses create separate inventory transaction types for transparent auditing.",
+        "Reopening maintenance records reverses direct-use transaction history without changing stock balances.",
+        "Existing Ex-Stock, Purchase, and Warehouse behavior remains unchanged.",
+        "Added regression tests for backend source validation, direct-use stock behavior, and cost reporting.",
+        "No database migration is required.",
+        "Application restart is required after update."
+      ]
+    },
+    {
       "version": "1.4.0",
       "status": "stable",
       "title": "Maintenance Classification & Searchable Report Filters",

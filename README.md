@@ -258,7 +258,17 @@ Custom `master_admin` profiles are intentionally not supported.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.4.0**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.5.0**.
+
+### 1.5.0 - Maintenance Supply Source Options
+
+- Added **9001 Source** and **Expenses** to Maintenance > Spare Parts & Materials > Source.
+- Both options record direct material usage **without deducting Inventory stock**.
+- Recorded material values appear in maintenance totals and PDF/Excel exports.
+- Added separate inventory transaction classifications and reversal handling for 9001 Source and Expenses.
+- Existing Ex-Stock, Purchase, and Warehouse source behavior remains unchanged.
+- Added backend regression tests for the new source options.
+- No database migration is required; application restart is required after update.
 
 ### 1.4.0 - Maintenance Classification & Searchable Report Filters
 
