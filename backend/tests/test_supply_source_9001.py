@@ -1,4 +1,4 @@
-"""Regression tests for the 9001 Source maintenance spare-part option.
+"""Regression tests for added maintenance spare-part supply source options.
 
 Run from backend/: ./venv/bin/python3 -m unittest discover -s tests -p 'test_supply_source_9001.py'
 No database mutation occurs in these tests.
@@ -25,9 +25,18 @@ class SupplySource9001Tests(unittest.TestCase):
         self.assertEqual(DIRECT_USE_KINDS["9001 Source"], "9001_source")
 
     def test_direct_use_value_and_pdf_cost(self):
-        p = {"supply_source": "9001 Source", "cost": 250.0}
-        self.assertTrue(_shows_cost(p))
-        self.assertEqual(_total_cost([p]), 250.0)
+        for source in ("9001 Source", "Expenses"):
+            with self.subTest(source=source):
+                p = {"supply_source": source, "cost": 250.0}
+                self.assertTrue(_shows_cost(p))
+                self.assertEqual(_total_cost([p]), 250.0)
+
+    def test_expenses_is_accepted_and_does_not_deduct_stock(self):
+        line = PartLine(item_id="test-part", qty=3, supply_source="Expenses")
+        self.assertEqual(line.supply_source, "Expenses")
+        self.assertEqual(_part_source(line.model_dump()), "Expenses")
+        self.assertFalse(_part_uses_inventory(line.model_dump()))
+        self.assertEqual(DIRECT_USE_KINDS["Expenses"], "expenses")
 
     def test_old_sources_unchanged(self):
         self.assertTrue(_part_uses_inventory({"supply_source": "Ex-Stock"}))

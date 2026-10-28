@@ -205,7 +205,7 @@ async def _maintenance_rows(params):
             sum(
                 float(part.get("cost") or 0)
                 for part in (m.get("parts_consumed") or [])
-                if (part.get("supply_source") or "Ex-Stock") in ("Purchase", "Warehouse", "9001 Source")
+                if (part.get("supply_source") or "Ex-Stock") in ("Purchase", "Warehouse", "9001 Source", "Expenses")
             ),
             2,
         )

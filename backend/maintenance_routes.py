@@ -33,18 +33,19 @@ MANAGE = require_roles("admin", "supervisor")
 FILE_ADMIN = require_roles("admin")
 FILE_ADMIN = require_roles("admin")
 
-SUPPLY_SOURCES = ("Ex-Stock", "Purchase", "Warehouse", "9001 Source")
+SUPPLY_SOURCES = ("Ex-Stock", "Purchase", "Warehouse", "9001 Source", "Expenses")
 DIRECT_USE_KINDS = {
     "Purchase": "purchase",
     "Warehouse": "warehouse",
     "9001 Source": "9001_source",
+    "Expenses": "expenses",
 }
 
 
 class PartLine(BaseModel):
     item_id: str
     qty: float = Field(gt=0)
-    supply_source: Literal["Ex-Stock", "Purchase", "Warehouse", "9001 Source"] = "Ex-Stock"
+    supply_source: Literal["Ex-Stock", "Purchase", "Warehouse", "9001 Source", "Expenses"] = "Ex-Stock"
     stock_override: bool = False
 
 
@@ -262,7 +263,7 @@ async def _stock_mutation(item_id: str, delta: float, key: str, allow_negative: 
                 detail=(
                     f"Insufficient stock for {current.get('item_name') or item_id} "
                     f"(have {before:g}, need {abs(delta):g}). "
-                    "Choose Purchase, Warehouse, or 9001 Source; or correct the quantity."
+                    "Choose Purchase, Warehouse, 9001 Source, or Expenses; or correct the quantity."
                 ),
             )
 

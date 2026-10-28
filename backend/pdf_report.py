@@ -94,7 +94,7 @@ def _source_label(part):
 
 
 def _shows_cost(part):
-    return (part.get("supply_source") or "Ex-Stock") in ("Purchase", "Warehouse", "9001 Source")
+    return (part.get("supply_source") or "Ex-Stock") in ("Purchase", "Warehouse", "9001 Source", "Expenses")
 
 
 def _location_label(equipment):
@@ -418,6 +418,14 @@ def build_maintenance_pdf(
             el.append(Paragraph(
                 "<b>9001 Source:</b> direct use from 9001 Source; inventory "
                 "stock was not reduced and the recorded value is displayed.",
+                ss["Sub"],
+            ))
+
+        if any((p.get("supply_source") or "Ex-Stock") == "Expenses"
+               for p in parts):
+            el.append(Paragraph(
+                "<b>Expenses:</b> direct expense recorded without reducing "
+                "inventory stock; the recorded value is displayed.",
                 ss["Sub"],
             ))
 
