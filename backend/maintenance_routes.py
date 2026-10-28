@@ -33,13 +33,18 @@ MANAGE = require_roles("admin", "supervisor")
 FILE_ADMIN = require_roles("admin")
 FILE_ADMIN = require_roles("admin")
 
-SUPPLY_SOURCES = ("Ex-Stock", "Purchase", "Warehouse")
+SUPPLY_SOURCES = ("Ex-Stock", "Purchase", "Warehouse", "9001 Source")
+DIRECT_USE_KINDS = {
+    "Purchase": "purchase",
+    "Warehouse": "warehouse",
+    "9001 Source": "9001_source",
+}
 
 
 class PartLine(BaseModel):
     item_id: str
     qty: float = Field(gt=0)
-    supply_source: Literal["Ex-Stock", "Purchase", "Warehouse"] = "Ex-Stock"
+    supply_source: Literal["Ex-Stock", "Purchase", "Warehouse", "9001 Source"] = "Ex-Stock"
     stock_override: bool = False
 
 
@@ -100,7 +105,7 @@ async def _resolve_parts(part_lines):
         # Keep the field for backward-compatible payload/history only.
         stock_override = False
         price = float(item.get("unit_price") or 0)
-        shows_cost = source in ("Purchase", "Warehouse")
+        shows_cost = source in DIRECT_USE_KINDS
         recorded_price = price if shows_cost else 0.0
         recorded_cost = (
             round(price * float(pl.qty), 2)
@@ -116,7 +121,7 @@ async def _resolve_parts(part_lines):
             "unit": item["unit"],
             "qty": float(pl.qty),
             # Ex-Stock is intentionally shown without a value.
-            # Purchase and Warehouse keep their recorded inventory value.
+            # Non-Ex-Stock sources keep their recorded catalog value.
             "unit_price": recorded_price,
             "cost": recorded_cost,
             "supply_source": source,
@@ -127,12 +132,12 @@ async def _resolve_parts(part_lines):
 
 
 def _total_cost(parts):
-    """Recorded value for Purchase and Warehouse; Ex-Stock stays unpriced."""
+    """Recorded value for direct-use sources; Ex-Stock stays unpriced."""
     return round(
         sum(
             float(p.get("cost") or 0)
             for p in parts
-            if _part_source(p) in ("Purchase", "Warehouse")
+            if _part_source(p) in DIRECT_USE_KINDS
         ),
         2,
     )
@@ -257,7 +262,7 @@ async def _stock_mutation(item_id: str, delta: float, key: str, allow_negative: 
                 detail=(
                     f"Insufficient stock for {current.get('item_name') or item_id} "
                     f"(have {before:g}, need {abs(delta):g}). "
-                    "Choose Purchase or correct the quantity."
+                    "Choose Purchase, Warehouse, or 9001 Source; or correct the quantity."
                 ),
             )
 
@@ -512,16 +517,12 @@ async def close_maintenance(mid: str, body: CloseBody, user: dict = Depends(EDIT
                 affects_stock, tx_type = True, "consume"
                 note = f"Ex-Stock issued on {claimed['mnt_no']}"
             else:
-                direct_kind = "warehouse" if source == "Warehouse" else "purchase"
+                direct_kind = DIRECT_USE_KINDS[source]
                 key = f"{op_id}:{direct_kind}:{index}"
                 fresh = await db.inventory_items.find_one({"id": item["id"]})
                 before = after = float((fresh or item).get("stock") or 0)
                 override_applied, affects_stock = False, False
-                tx_type = (
-                    "warehouse_direct_use"
-                    if source == "Warehouse"
-                    else "purchase_direct_use"
-                )
+                tx_type = f"{direct_kind}_direct_use"
                 note = (
                     f"{source}/direct-use on {claimed['mnt_no']} "
                     "(inventory not deducted)"
@@ -596,16 +597,12 @@ async def reopen_maintenance(mid: str, user: dict = Depends(MANAGE)):
                     )
                     note = f"Ex-Stock reversal on reopen {claimed['mnt_no']}"
                 else:
-                    direct_kind = "warehouse" if source == "Warehouse" else "purchase"
+                    direct_kind = DIRECT_USE_KINDS[source]
                     key = f"{op_id}:{direct_kind}-reopen:{index}"
                     fresh = await db.inventory_items.find_one({"id": item["id"]})
                     before = after = float((fresh or item).get("stock") or 0)
                     affects = False
-                    tx_type = (
-                        "warehouse_reversal"
-                        if source == "Warehouse"
-                        else "purchase_reversal"
-                    )
+                    tx_type = f"{direct_kind}_reversal"
                     note = (
                         f"{source} usage reversal on reopen {claimed['mnt_no']} "
                         "(inventory unchanged)"

@@ -214,14 +214,14 @@ export default function MaintenanceDialog({
   }, [inventory, equipmentCategory]);
 
   const hasPricedParts = parts.some(
-    (p) => ["Purchase", "Warehouse"].includes(
+    (p) => ["Purchase", "Warehouse", "9001 Source"].includes(
       p.supply_source || "Ex-Stock"
     )
   );
 
   const pricedTotalCost = parts.reduce((sum, p) => {
     const source = p.supply_source || "Ex-Stock";
-    if (!["Purchase", "Warehouse"].includes(source)) {
+    if (!["Purchase", "Warehouse", "9001 Source"].includes(source)) {
       return sum;
     }
 
@@ -263,7 +263,7 @@ export default function MaintenanceDialog({
   const submit = async () => {
     if (hasBlockingPart) {
       toast.error(
-        "Resolve the spare-part warning first: choose Purchase/Warehouse or correct the quantity. Ex-Stock cannot make stock negative."
+        "Resolve the spare-part warning first: choose Purchase/Warehouse/9001 Source or correct the quantity. Ex-Stock cannot make stock negative."
       );
       return;
     }
@@ -581,8 +581,8 @@ export default function MaintenanceDialog({
               </span>
               <span className="mt-1 block text-[11px] leading-4 text-slate-400">
                 Ex-Stock deducts inventory without displaying a value and
-                cannot make stock negative. Purchase and Warehouse record
-                direct use without reducing stock and display their value.
+                cannot make stock negative. Purchase, Warehouse, and 9001 Source
+                record direct use without reducing stock and display their value.
               </span>
 
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -637,7 +637,7 @@ export default function MaintenanceDialog({
               const check = partChecks[i];
               const item = check?.item;
               const showsCost =
-                ["Purchase", "Warehouse"].includes(check?.source);
+                ["Purchase", "Warehouse", "9001 Source"].includes(check?.source);
               const lineCost =
                 item && showsCost
                   ? (item.unit_price || 0) * (Number(p.qty) || 0)
@@ -666,7 +666,7 @@ export default function MaintenanceDialog({
 
                       {item && (
                         <div className="mt-1 min-w-0 text-[11px] leading-4">
-                          {["Purchase", "Warehouse"].includes(check.source) ? (
+                          {["Purchase", "Warehouse", "9001 Source"].includes(check.source) ? (
                             <span className="text-blue-600">
                               {check.source}/direct-use — inventory remains at{" "}
                               <b>
@@ -686,7 +686,7 @@ export default function MaintenanceDialog({
                                   {check.qty} {item.unit}
                                 </b>
                                 . Ex-Stock cannot create a negative stock
-                                balance. Choose Purchase/Warehouse or correct
+                                balance. Choose Purchase/Warehouse/9001 Source or correct
                                 the quantity.
                               </span>
                             </span>
@@ -740,6 +740,7 @@ export default function MaintenanceDialog({
                           <option value="Ex-Stock">Ex-Stock</option>
                           <option value="Purchase">Purchase</option>
                           <option value="Warehouse">Warehouse</option>
+                          <option value="9001 Source">9001 Source</option>
                         </select>
                       </div>
 
@@ -801,7 +802,7 @@ export default function MaintenanceDialog({
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
               One or more Ex-Stock items exceed the available inventory.
-              Change the source to <b>Purchase</b> / <b>Warehouse</b>, or
+              Change the source to <b>Purchase</b> / <b>Warehouse</b> / <b>9001 Source</b>, or
               correct the quantity before closing.
             </span>
           </div>
