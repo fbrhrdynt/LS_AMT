@@ -7,11 +7,11 @@ import secrets
 from datetime import timedelta
 from urllib.parse import quote
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Depends
 from pydantic import BaseModel, EmailStr, Field
 from pymongo import ReturnDocument
 
-from auth import hash_password, verify_password
+from auth import hash_password, verify_password, get_current_user
 from core import audit_log, db, new_id, now_iso, now_utc
 from email_service import send_password_reset_email
 
@@ -262,3 +262,20 @@ async def confirm_password_reset(
             "Please sign in with your new password."
         ),
     }
+
+
+@router.post("/password-reset/admin-request")
+async def admin_request_password_reset(body: PasswordResetRequestBody, request: Request,
+                                       background_tasks: BackgroundTasks,
+                                       actor: dict = Depends(get_current_user)):
+    if actor.get("role") not in ("admin", "master_admin"):
+        raise HTTPException(status_code=403, detail="Administrator access required")
+    email = str(body.email).strip().lower()
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user or not user.get("password_hash"):
+        return GENERIC_RESPONSE
+    # Reuse the established one-time, expiring reset-link workflow.
+    result = await request_password_reset(body, request, background_tasks)
+    await audit_log("user", user["id"], "user.password_reset.admin_request", actor,
+                    f"Password reset email requested by {actor.get('email')}")
+    return result
