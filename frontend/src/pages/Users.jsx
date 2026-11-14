@@ -628,6 +628,16 @@ export default function UsersPage() {
     }
   };
 
+  const requestPasswordReset = async (target) => {
+    if (!isAdmin(user) || !canManageTarget(user, target)) return;
+    try {
+      await api.post("/auth/password-reset/admin-request", { email: target.email });
+      toast.success("Password reset email requested");
+    } catch (error) {
+      toast.error(formatApiError(error.response?.data?.detail) || "Unable to request password reset");
+    }
+  };
+
   const masterResetPassword = async (target) => {
     if (!isMasterAdmin(user) || target.id === user.id) return;
     const next = window.prompt(`Set a new password for ${target.name} (minimum 12 characters):`);
@@ -844,8 +854,9 @@ export default function UsersPage() {
                           {target.locked && (
                             <button type="button" onClick={() => unlockAccount(target)} className="text-amber-600 hover:text-emerald-700 text-xs font-semibold" title="Unlock account">Unlock</button>
                           )}
+                          <button type="button" onClick={() => requestPasswordReset(target)} className="text-slate-600 hover:text-blue-700 text-xs font-semibold" title="Send password reset link">Request reset</button>
                           {isMasterAdmin(user) && (
-                            <button type="button" onClick={() => masterResetPassword(target)} className="text-blue-600 hover:text-blue-800 text-xs font-semibold" title="Set password">Reset password</button>
+                            <button type="button" onClick={() => masterResetPassword(target)} className="text-blue-600 hover:text-blue-800 text-xs font-semibold" title="Set password">Set password</button>
                           )}
                           {!protectedOwner && (
                             <button type="button" onClick={() => remove(target)} className="text-slate-400 hover:text-red-600" title="Delete user">
