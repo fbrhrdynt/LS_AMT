@@ -33,6 +33,7 @@ export default function Login() {
           <BrandLogo
             fallback="/amt-logo-tagline.png"
             alt="AMT — Asset Maintenance Tracker"
+            fetchPriority="high"
             className="h-24 max-w-[360px] w-auto rounded-lg bg-white/95 p-3 object-contain object-left"
           />
         </div>
@@ -49,6 +50,7 @@ export default function Login() {
             <BrandLogo
               fallback="/amt-logo-tagline.png"
               alt="AMT — Asset Maintenance Tracker"
+              fetchPriority="high"
               className="h-16 max-w-[280px] w-auto object-contain object-left"
             />
           </div>
