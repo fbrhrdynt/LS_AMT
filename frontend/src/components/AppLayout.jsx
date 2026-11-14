@@ -26,6 +26,7 @@ import {
   Gauge,
   Moon,
   Sun,
+  Trash2,
 } from "lucide-react";
 
 import { api } from "@/lib/api";
@@ -59,6 +60,7 @@ const ROUTE_PRELOADERS = {
   "/audit": () => import("@/pages/Audit"),
   "/users": () => import("@/pages/Users"),
   "/settings": () => import("@/pages/Settings"),
+  "/trash": () => import("@/pages/Trash"),
 };
 
 const preloadedRoutes = new Set();
@@ -138,6 +140,13 @@ const NAV = [
     icon: Users,
     key: "usr",
     userManager: true,
+  },
+  {
+    to: "/trash",
+    label: "Trash / Recycle Bin",
+    icon: Trash2,
+    key: "trash",
+    admin: true,
   },
   {
     to: "/settings",
