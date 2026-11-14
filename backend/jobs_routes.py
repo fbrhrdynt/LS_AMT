@@ -42,7 +42,7 @@ def _job_field_name(job: dict | None) -> str:
 # -------- clients --------
 @router.get("/clients")
 async def list_clients(user: dict = Depends(get_current_user)):
-    clients = await db.clients.find({}, {"_id": 0}).sort("name", 1).to_list(1000)
+    clients = await db.clients.find({"deleted_at": None}, {"_id": 0}).sort("name", 1).to_list(1000)
     for c in clients:
         c["job_count"] = await db.jobs.count_documents({"client_id": c["id"]})
     return clients
@@ -69,21 +69,26 @@ async def update_client(cid: str, body: ClientBody, user: dict = Depends(MANAGE)
 
 @router.delete("/clients/{cid}")
 async def delete_client(cid: str, user: dict = Depends(MANAGE)):
-    client = await db.clients.find_one({"id": cid})
+    client = await db.clients.find_one({"id": cid, "deleted_at": None})
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    if await db.jobs.count_documents({"client_id": cid}):
-        raise HTTPException(status_code=400, detail="Client has jobs. Delete the jobs first.")
-    await db.clients.delete_one({"id": cid})
-    await audit_log("client", cid, "client.delete", user, f"Deleted {client['name']}")
-    return {"ok": True}
+    if await db.jobs.count_documents({"client_id": cid, "deleted_at": None}):
+        raise HTTPException(status_code=400, detail="Client has active jobs. Move its jobs to Trash first.")
+    stamp = now_iso()
+    await db.clients.update_one({"id": cid, "deleted_at": None}, {"$set": {
+        "deleted_at": stamp, "deleted_by": user.get("id"),
+        "deleted_by_name": user.get("name", ""), "updated_at": stamp,
+    }})
+    await audit_log("client", cid, "client.soft_delete", user, f"Moved {client.get('name')} to Trash")
+    return {"ok": True, "deleted_at": stamp}
+
 
 
 # -------- jobs --------
 @router.get("/jobs")
 async def list_jobs(client_id: str = "", status: str = "", q: str = "",
                     user: dict = Depends(get_current_user)):
-    query = {}
+    query = {"deleted_at": None}
     if client_id:
         query["client_id"] = client_id
     if status:
@@ -151,15 +156,19 @@ async def update_job(jid: str, body: JobBody, user: dict = Depends(MANAGE)):
 
 @router.delete("/jobs/{jid}")
 async def delete_job(jid: str, user: dict = Depends(MANAGE)):
-    job = await db.jobs.find_one({"id": jid})
+    job = await db.jobs.find_one({"id": jid, "deleted_at": None})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     if await db.assignments.count_documents({"job_id": jid, "status": "Active"}):
         raise HTTPException(status_code=400, detail="Job has equipment on active assignment. Demobilize first.")
-    await db.assignments.delete_many({"job_id": jid})
-    await db.jobs.delete_one({"id": jid})
-    await audit_log("job", jid, "job.delete", user, f"Deleted {job['job_number']}")
-    return {"ok": True}
+    stamp = now_iso()
+    await db.jobs.update_one({"id": jid, "deleted_at": None}, {"$set": {
+        "deleted_at": stamp, "deleted_by": user.get("id"),
+        "deleted_by_name": user.get("name", ""), "updated_at": stamp,
+    }})
+    await audit_log("job", jid, "job.soft_delete", user, f"Moved {job.get('job_number')} to Trash; assignments preserved")
+    return {"ok": True, "deleted_at": stamp}
+
 
 
 @router.get("/jobs/{jid}")
