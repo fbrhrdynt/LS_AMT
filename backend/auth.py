@@ -6,7 +6,7 @@ import bcrypt
 import jwt
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
-from fastapi import APIRouter, HTTPException, Request, Response, Depends
+from fastapi import APIRouter, HTTPException, Request, Response, Depends, BackgroundTasks
 from pydantic import BaseModel, EmailStr, Field
 
 from core import db, new_id, now_utc, now_iso, audit_log, clean, ROLES, MENU_KEYS
@@ -323,6 +323,10 @@ class LoginBody(BaseModel):
 
 
 async def _check_lockout(identifier: str):
+    email = identifier.rsplit(":", 1)[-1]
+    user = await db.users.find_one({"email": email}, {"_id": 0, "locked": 1, "locked_until": 1})
+    if user and (user.get("locked") or (user.get("locked_until") and user["locked_until"] > now_utc())):
+        raise HTTPException(status_code=423, detail="Account locked after repeated failed attempts. Contact an administrator.")
     rec = await db.login_attempts.find_one({"identifier": identifier})
     if rec and rec.get("count", 0) >= 5:
         locked_until = rec.get("locked_until")
@@ -347,10 +351,10 @@ async def _register_failure(identifier: str):
         return_document=ReturnDocument.AFTER,
     )
     if rec and rec.get("count", 0) >= 5:
-        await db.login_attempts.update_one(
-            {"identifier": identifier},
-            {"$set": {"locked_until": now_utc() + timedelta(minutes=15)}},
-        )
+        until = now_utc() + timedelta(minutes=15)
+        await db.login_attempts.update_one({"identifier": identifier}, {"$set": {"locked_until": until}})
+        email = identifier.rsplit(":", 1)[-1]
+        await db.users.update_one({"email": email}, {"$set": {"locked": True, "locked_until": until, "updated_at": now_iso()}})
 
 
 async def _issue_session(user: dict, response: Response, request: Request):
@@ -394,6 +398,7 @@ async def login(body: LoginBody, response: Response, request: Request):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     await db.login_attempts.delete_one({"identifier": identifier})
+    await db.users.update_one({"id": user["id"]}, {"$unset": {"locked": "", "locked_until": ""}})
     await _issue_session(user, response, request)
     await audit_log("user", user["id"], "user.login", user, "Login successful")
     return public_user(user)
@@ -458,6 +463,47 @@ async def refresh_token(response: Response, request: Request):
 
 
 users_router = APIRouter(prefix="/api/users")
+
+class MasterPasswordBody(BaseModel):
+    new_password: str = Field(min_length=12, max_length=128)
+
+
+@users_router.post("/{uid}/unlock")
+async def unlock_user(uid: str, actor: dict = Depends(require_roles("admin"))):
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if actor.get("role") != "master_admin" and target.get("role") == "master_admin":
+        raise HTTPException(status_code=403, detail="Only Master Admin can unlock this account")
+    await db.users.update_one({"id": uid}, {"$unset": {"locked": "", "locked_until": ""}})
+    import re
+    await db.login_attempts.delete_many({"identifier": {"$regex": ":" + re.escape(target.get("email", "")) + "$"}})
+    await audit_log("user", uid, "user.unlock", actor, "Account unlocked")
+    return {"ok": True, "message": "Account unlocked"}
+
+
+@users_router.post("/{uid}/master-reset-password")
+async def master_reset_user_password(uid: str, body: MasterPasswordBody, background_tasks: BackgroundTasks,
+                                     actor: dict = Depends(require_roles("master_admin"))):
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if uid == actor["id"]:
+        raise HTTPException(status_code=400, detail="Use normal password change for your own account")
+    if verify_password(body.new_password, target.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="New password must be different")
+    await db.users.update_one({"id": uid}, {"$set": {"password_hash": hash_password(body.new_password),
+        "password_changed_at": now_iso(), "password_changed_by": actor.get("id")}, "$unset": {"locked": "", "locked_until": ""}})
+    await db.auth_sessions.delete_many({"user_id": uid})
+    import re
+    await db.login_attempts.delete_many({"identifier": {"$regex": ":" + re.escape(target.get("email", "")) + "$"}})
+    await audit_log("user", uid, "user.master_password_reset", actor, "Password changed by Master Admin",
+        {"actor_id": actor["id"], "target_email": target.get("email")})
+    from email_service import send_master_password_changed_email
+    background_tasks.add_task(send_master_password_changed_email, recipient=target["email"],
+        display_name=target.get("name") or target["email"], admin_name=actor.get("name") or actor["email"])
+    return {"ok": True, "message": "Password changed; sessions revoked and notification queued."}
+
 
 
 CREATABLE_ROLES = {
