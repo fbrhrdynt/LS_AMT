@@ -46,6 +46,29 @@ import { UpdateBanner } from "@/components/UpdateNotice";
 import BrandLogo from "@/components/BrandLogo";
 
 
+const ROUTE_PRELOADERS = {
+  "/": () => import("@/pages/Dashboard"),
+  "/equipment": () => import("@/pages/EquipmentList"),
+  "/maintenance": () => import("@/pages/MaintenanceList"),
+  "/calibration": () => import("@/pages/Calibration"),
+  "/inventory": () => import("@/pages/Inventory"),
+  "/clients": () => import("@/pages/Clients"),
+  "/jobs": () => import("@/pages/Jobs"),
+  "/reports": () => import("@/pages/Reports"),
+  "/import": () => import("@/pages/ImportWizard"),
+  "/audit": () => import("@/pages/Audit"),
+  "/users": () => import("@/pages/Users"),
+  "/settings": () => import("@/pages/Settings"),
+};
+
+const preloadedRoutes = new Set();
+function preloadRoute(path) {
+  const load = ROUTE_PRELOADERS[path];
+  if (!load || preloadedRoutes.has(path)) return;
+  preloadedRoutes.add(path);
+  load().catch(() => preloadedRoutes.delete(path));
+}
+
 const NAV = [
   {
     to: "/",
@@ -448,6 +471,9 @@ export default function AppLayout({
               <Link
                 key={item.key}
                 to={item.to}
+                onMouseEnter={() => preloadRoute(item.to)}
+                onFocus={() => preloadRoute(item.to)}
+                onTouchStart={() => preloadRoute(item.to)}
                 onClick={() =>
                   setMobileOpen(false)
                 }
