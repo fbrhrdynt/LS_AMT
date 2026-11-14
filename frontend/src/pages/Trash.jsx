@@ -1,0 +1,11 @@
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { RotateCcw, Trash2, RefreshCw } from "lucide-react";
+export default function Trash() {
+ const [items,setItems]=useState([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState("");
+ const load=async()=>{setLoading(true);try{const {data}=await api.get("/trash");setItems(data.items||[]);}catch(e){toast.error(e.response?.data?.detail||"Failed to load Trash");}finally{setLoading(false);}};
+ useEffect(()=>{load();},[]);
+ const restore=async item=>{if(!window.confirm(`Restore ${item.title}?`))return;setBusy(item.id);try{await api.post(`/trash/${item.entity}/${item.id}/restore`);toast.success("Record restored");await load();}catch(e){toast.error(e.response?.data?.detail||"Restore failed");}finally{setBusy("");}};
+ return <div className="mx-auto max-w-5xl space-y-5"><div className="flex items-center justify-between gap-3"><div><h1 className="text-2xl font-bold text-slate-900">Trash / Recycle Bin</h1><p className="mt-1 text-sm text-slate-500">Deleted records are retained and can be restored. Permanent deletion is disabled.</p></div><button onClick={load} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm"><RefreshCw className="h-4 w-4"/>Refresh</button></div><div className="rounded-lg border bg-white">{loading?<p className="p-6 text-sm text-slate-500">Loading…</p>:items.length===0?<div className="p-10 text-center text-sm text-slate-500"><Trash2 className="mx-auto mb-2 h-8 w-8 opacity-40"/>Trash is empty</div>:<div className="divide-y">{items.map(item=><div key={item.entity+item.id} className="flex flex-wrap items-center justify-between gap-3 p-4"><div className="min-w-0"><div className="font-medium text-slate-900">{item.title}</div><div className="mt-1 text-xs text-slate-500">{item.entity_label} · Deleted {item.deleted_at?new Date(item.deleted_at).toLocaleString():"—"}{item.deleted_by_name?" · by "+item.deleted_by_name:""}</div></div><button disabled={busy===item.id} onClick={()=>restore(item)} className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"><RotateCcw className="h-4 w-4"/>{busy===item.id?"Restoring…":"Restore"}</button></div>)}</div>}</div></div>;
+}
