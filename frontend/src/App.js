@@ -35,6 +35,7 @@ const UsersPage = lazy(() => import("@/pages/Users"));
 const SettingsPage = lazy(() => import("@/pages/Settings"));
 const VersionHistory = lazy(() => import("@/pages/VersionHistory"));
 const RoleProfiles = lazy(() => import("@/pages/RoleProfiles"));
+const Trash = lazy(() => import("@/pages/Trash"));
 const PublicEquipment = lazy(() => import("@/pages/PublicEquipment"));
 const PublicInventory = lazy(() => import("@/pages/PublicInventory"));
 const PublicInventoryCategory = lazy(() => import("@/pages/PublicInventoryCategory"));
@@ -119,6 +120,7 @@ function AppRoutes() {
         <Route path="/version-history" element={<RoleRoute allow={isAdmin} menu="set"><VersionHistory /></RoleRoute>} />
         <Route path="/version-log" element={<Navigate to="/version-history" replace />} />
         <Route path="/roles" element={<RoleRoute allow={isAdmin} menu="usr"><RoleProfiles /></RoleRoute>} />
+        <Route path="/trash" element={<RoleRoute allow={(user) => user?.role === "master_admin" || user?.role === "admin"}><Trash /></RoleRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
