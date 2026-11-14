@@ -8,11 +8,13 @@ export default function BrandLogo({
   fetchPriority = "auto",
 }) {
   const [useCustom, setUseCustom] = useState(true);
-  const [version, setVersion] = useState(() => Date.now());
+  // Keep a stable URL across page loads so the browser can reuse its cached logo.
+  // The branding-changed event adds a one-time cache-buster after an admin uploads a new logo.
+  const [version, setVersion] = useState("");
 
   useEffect(() => {
     const refresh = () => {
-      setVersion(Date.now());
+      setVersion(String(Date.now()));
       setUseCustom(true);
     };
 
@@ -20,14 +22,20 @@ export default function BrandLogo({
     return () => window.removeEventListener("amt-branding-changed", refresh);
   }, []);
 
+  const logoUrl = version
+    ? `${API}/settings/app-logo?v=${version}`
+    : `${API}/settings/app-logo`;
+
   return (
     <img
-      src={useCustom ? `${API}/settings/app-logo?v=${version}` : fallback}
+      src={useCustom ? logoUrl : fallback}
       alt={alt}
       className={className}
       fetchPriority={fetchPriority}
       loading="eager"
       decoding="async"
+      width="360"
+      height="96"
       onError={() => setUseCustom(false)}
     />
   );
