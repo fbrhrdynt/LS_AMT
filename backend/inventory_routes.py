@@ -117,7 +117,7 @@ async def list_inventory(
     sort: str = "category_asc",
     user: dict = Depends(VIEW),
 ):
-    query = {}
+    query = {"deleted_at": None}
 
     if q:
         escaped = re.escape(q)
@@ -486,52 +486,19 @@ async def adjust_stock(
 
 
 @router.delete("/inventory/{iid}")
-async def delete_item(
-    iid: str,
-    user: dict = Depends(DELETE),
-):
-    item = await db.inventory_items.find_one(
-        {"id": iid}
-    )
-
+async def delete_item(iid: str, user: dict = Depends(DELETE)):
+    item = await db.inventory_items.find_one({"id": iid, "deleted_at": None})
     if not item:
-        raise HTTPException(
-            status_code=404,
-            detail="Item not found",
-        )
-
-    used = await db.inventory_transactions.count_documents(
-        {
-            "item_id": iid,
-            "direction": "out",
-        }
+        raise HTTPException(status_code=404, detail="Item not found")
+    stamp = now_iso()
+    result = await db.inventory_items.update_one(
+        {"id": iid, "deleted_at": None},
+        {"$set": {"deleted_at": stamp, "deleted_by": user.get("id"), "deleted_by_name": user.get("name", ""), "updated_at": stamp}},
     )
-
-    if used:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Item has consumption history and cannot "
-                "be deleted. Set stock to 0 instead."
-            ),
-        )
-
-    await db.inventory_items.delete_one(
-        {"id": iid}
-    )
-    await db.inventory_transactions.delete_many(
-        {"item_id": iid}
-    )
-
-    await audit_log(
-        "inventory",
-        iid,
-        "inventory.delete",
-        user,
-        f"Deleted {item['item_code']}",
-    )
-
-    return {"ok": True}
+    if result.modified_count != 1:
+        raise HTTPException(status_code=409, detail="Item changed concurrently")
+    await audit_log("inventory", iid, "inventory.soft_delete", user, f"Moved {item.get('item_code')} to Trash; stock and transaction history preserved")
+    return {"ok": True, "deleted_at": stamp}
 
 
 @router.get("/inventory-transactions")
