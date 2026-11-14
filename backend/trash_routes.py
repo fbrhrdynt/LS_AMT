@@ -1,10 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pymongo.errors import DuplicateKeyError
 from core import db, now_iso, audit_log
-from auth import require_roles
+from auth import get_current_user
 
 router = APIRouter(prefix="/api/trash")
-MASTER_ADMIN = require_roles("master_admin")
+async def trash_admin(user: dict = Depends(get_current_user)):
+    import os
+    role = str(user.get("role") or "").lower()
+    env = os.environ.get("APP_ENV", "production").strip().lower()
+    if role == "master_admin" or (env != "production" and role == "admin"):
+        return user
+    raise HTTPException(status_code=403, detail="Trash access is restricted to MASTER ADMIN")
 COLLECTIONS = {
     "equipment": ("equipment", "Equipment"),
     "inventory": ("inventory_items", "Inventory"),
@@ -13,7 +19,7 @@ COLLECTIONS = {
 }
 
 @router.get("")
-async def list_trash(entity_type: str = "", q: str = "", user: dict = Depends(MASTER_ADMIN)):
+async def list_trash(entity_type: str = "", q: str = "", user: dict = Depends(trash_admin)):
     selected = {entity_type: COLLECTIONS[entity_type]} if entity_type in COLLECTIONS else COLLECTIONS
     items = []
     for key, (collection_name, label) in selected.items():
