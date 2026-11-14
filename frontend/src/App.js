@@ -13,10 +13,11 @@ import {
   isAdmin,
 } from "@/context/AuthContext";
 import { CurrencyProvider } from "@/context/CurrencyContext";
-const AppLayout = lazy(() => import("@/components/AppLayout"));
 import Login from "@/pages/Login";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
+
+const AppLayout = lazy(() => import("@/components/AppLayout"));
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const EquipmentList = lazy(() => import("@/pages/EquipmentList"));
