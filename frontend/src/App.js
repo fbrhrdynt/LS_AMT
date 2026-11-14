@@ -13,7 +13,7 @@ import {
   isAdmin,
 } from "@/context/AuthContext";
 import { CurrencyProvider } from "@/context/CurrencyContext";
-import AppLayout from "@/components/AppLayout";
+const AppLayout = lazy(() => import("@/components/AppLayout"));
 import Login from "@/pages/Login";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
