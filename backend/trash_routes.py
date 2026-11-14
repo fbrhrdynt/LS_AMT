@@ -35,7 +35,7 @@ async def list_trash(entity_type: str = "", q: str = "", user: dict = Depends(tr
     return {"total": len(items), "items": items[:500]}
 
 @router.post("/{entity_type}/{record_id}/restore")
-async def restore_record(entity_type: str, record_id: str, user: dict = Depends(MASTER_ADMIN)):
+async def restore_record(entity_type: str, record_id: str, user: dict = Depends(trash_admin)):
     config = COLLECTIONS.get(entity_type)
     if not config:
         raise HTTPException(status_code=404, detail="Unsupported Trash record type")
