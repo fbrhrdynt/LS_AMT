@@ -26,6 +26,7 @@ from license_routes import router as license_router
 from update_routes import router as update_router
 from product_routes import router as product_router
 from role_profiles import router as role_profiles_router
+from trash_routes import router as trash_router
 from public_access import backfill_equipment_public_tokens
 from importer import seed_from_excel
 from storage import init_storage
@@ -140,6 +141,7 @@ app.include_router(license_router)
 app.include_router(update_router)
 app.include_router(product_router)
 app.include_router(role_profiles_router)
+app.include_router(trash_router)
 
 
 async def _ensure_indexes():
