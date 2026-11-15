@@ -258,7 +258,21 @@ Custom `master_admin` profiles are intentionally not supported.
 
 ## Version History
 
-AMT uses semantic versions for production releases. These are product-facing summaries through **1.5.0**.
+AMT uses semantic versions for production releases. These are product-facing summaries through **1.5.1**.
+
+### 1.5.1 - Security, User Administration & Platform Improvements
+
+- Added a show/hide password control on the sign-in page.
+- Added account lockout after repeated failed login attempts, with Admin and Master Admin unlock controls.
+- Added Admin password-reset requests and Master Admin direct password changes, including session revocation and audit logging.
+- Expanded user administration with delegated hierarchy, custom role profiles, and per-user menu access controls.
+- Added and refined equipment calibration tracking and related exports.
+- Added Trash functionality for recovering deleted records.
+- Included the DEV-approved maintenance, equipment, jobs, and settings refinements.
+- Improved responsive layout, navigation, and mobile usability.
+- Improved frontend loading and performance, including route loading and asset delivery.
+- Added or refined public metadata resources, including robots.txt, llms.txt, and the ARD endpoint.
+- No manual database migration is planned; application restart is required after update.
 
 ### 1.5.0 - Maintenance Supply Source Options
 
