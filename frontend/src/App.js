@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
@@ -12,33 +13,36 @@ import {
   isAdmin,
 } from "@/context/AuthContext";
 import { CurrencyProvider } from "@/context/CurrencyContext";
-import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
-import Dashboard from "@/pages/Dashboard";
-import EquipmentList from "@/pages/EquipmentList";
-import EquipmentDetail from "@/pages/EquipmentDetail";
-import MaintenanceList from "@/pages/MaintenanceList";
-import Calibration from "@/pages/Calibration";
-import Inventory from "@/pages/Inventory";
-import Clients from "@/pages/Clients";
-import Jobs from "@/pages/Jobs";
-import JobDetail from "@/pages/JobDetail";
-import ImportWizard from "@/pages/ImportWizard";
-import Reports from "@/pages/Reports";
-import Audit from "@/pages/Audit";
-import UsersPage from "@/pages/Users";
-import SettingsPage from "@/pages/Settings";
-import VersionHistory from "@/pages/VersionHistory";
-import RoleProfiles from "@/pages/RoleProfiles";
-import PublicEquipment from "@/pages/PublicEquipment";
-import PublicInventory from "@/pages/PublicInventory";
-import PublicInventoryCategory from "@/pages/PublicInventoryCategory";
+
+const AppLayout = lazy(() => import("@/components/AppLayout"));
+
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const EquipmentList = lazy(() => import("@/pages/EquipmentList"));
+const EquipmentDetail = lazy(() => import("@/pages/EquipmentDetail"));
+const MaintenanceList = lazy(() => import("@/pages/MaintenanceList"));
+const Calibration = lazy(() => import("@/pages/Calibration"));
+const Inventory = lazy(() => import("@/pages/Inventory"));
+const Clients = lazy(() => import("@/pages/Clients"));
+const Jobs = lazy(() => import("@/pages/Jobs"));
+const JobDetail = lazy(() => import("@/pages/JobDetail"));
+const ImportWizard = lazy(() => import("@/pages/ImportWizard"));
+const Reports = lazy(() => import("@/pages/Reports"));
+const Audit = lazy(() => import("@/pages/Audit"));
+const UsersPage = lazy(() => import("@/pages/Users"));
+const SettingsPage = lazy(() => import("@/pages/Settings"));
+const VersionHistory = lazy(() => import("@/pages/VersionHistory"));
+const RoleProfiles = lazy(() => import("@/pages/RoleProfiles"));
+const Trash = lazy(() => import("@/pages/Trash"));
+const PublicEquipment = lazy(() => import("@/pages/PublicEquipment"));
+const PublicInventory = lazy(() => import("@/pages/PublicInventory"));
+const PublicInventoryCategory = lazy(() => import("@/pages/PublicInventoryCategory"));
 
 function FullLoader() {
   return (
-    <div className="flex min-h-screen items-center justify-center text-slate-500">
+    <div className="flex min-h-screen items-center justify-center text-slate-500" role="status" aria-live="polite">
       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
       Loading…
     </div>
@@ -60,27 +64,12 @@ function NoAccess() {
   );
 }
 
-function Protected({
-  menu,
-  feature,
-  children,
-}) {
-  const {
-    user,
-    license,
-  } = useAuth();
+function Protected({ menu, feature, children }) {
+  const { user, license } = useAuth();
   if (user === null) return <FullLoader />;
   if (!user) return <Navigate to="/login" replace />;
   if (menu && !hasMenuAccess(user, menu)) return <NoAccess />;
-  if (
-    feature &&
-    !hasLicenseFeature(
-      license,
-      feature
-    )
-  ) {
-    return <NoAccess />;
-  }
+  if (feature && !hasLicenseFeature(license, feature)) return <NoAccess />;
   return <AppLayout>{children}</AppLayout>;
 }
 
@@ -101,38 +90,40 @@ function RoleRoute({ allow, menu, children }) {
   }
 
   if (menu && !hasMenuAccess(user, menu)) return <NoAccess />;
-
   return <AppLayout>{children}</AppLayout>;
 }
 
 function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/q/e/:token" element={<PublicEquipment />} />
-      <Route path="/q/inventory/:token" element={<PublicInventory />} />
-      <Route path="/q/inventory-category/:token" element={<PublicInventoryCategory />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/" element={<Protected menu="dash"><Dashboard /></Protected>} />
-      <Route path="/equipment" element={<Protected menu="eq"><EquipmentList /></Protected>} />
-      <Route path="/equipment/:id" element={<Protected menu="eq"><EquipmentDetail /></Protected>} />
-      <Route path="/maintenance" element={<Protected menu="mnt"><MaintenanceList /></Protected>} />
-      <Route path="/calibration" element={<Protected menu="cal"><Calibration /></Protected>} />
-      <Route path="/inventory" element={<Protected menu="inv"><Inventory /></Protected>} />
-      <Route path="/clients" element={<Protected menu="cli"><Clients /></Protected>} />
-      <Route path="/jobs" element={<Protected menu="job"><Jobs /></Protected>} />
-      <Route path="/jobs/:id" element={<Protected menu="job"><JobDetail /></Protected>} />
-      <Route path="/import" element={<RoleRoute allow={canManage} menu="imp"><ImportWizard /></RoleRoute>} />
-      <Route path="/reports" element={<Protected menu="rep"><Reports /></Protected>} />
-      <Route path="/audit" element={<Protected menu="aud" feature="audit_log"><Audit /></Protected>} />
-      <Route path="/users" element={<RoleRoute allow={canManageUsers} menu="usr"><UsersPage /></RoleRoute>} />
-      <Route path="/settings" element={<RoleRoute allow={isAdmin} menu="set"><SettingsPage /></RoleRoute>} />
-      <Route path="/version-history" element={<RoleRoute allow={isAdmin} menu="set"><VersionHistory /></RoleRoute>} />
-      <Route path="/version-log" element={<Navigate to="/version-history" replace />} />
-      <Route path="/roles" element={<RoleRoute allow={isAdmin} menu="usr"><RoleProfiles /></RoleRoute>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <Suspense fallback={<FullLoader />}>
+      <Routes>
+        <Route path="/q/e/:token" element={<PublicEquipment />} />
+        <Route path="/q/inventory/:token" element={<PublicInventory />} />
+        <Route path="/q/inventory-category/:token" element={<PublicInventoryCategory />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/" element={<Protected menu="dash"><Dashboard /></Protected>} />
+        <Route path="/equipment" element={<Protected menu="eq"><EquipmentList /></Protected>} />
+        <Route path="/equipment/:id" element={<Protected menu="eq"><EquipmentDetail /></Protected>} />
+        <Route path="/maintenance" element={<Protected menu="mnt"><MaintenanceList /></Protected>} />
+        <Route path="/calibration" element={<Protected menu="cal"><Calibration /></Protected>} />
+        <Route path="/inventory" element={<Protected menu="inv"><Inventory /></Protected>} />
+        <Route path="/clients" element={<Protected menu="cli"><Clients /></Protected>} />
+        <Route path="/jobs" element={<Protected menu="job"><Jobs /></Protected>} />
+        <Route path="/jobs/:id" element={<Protected menu="job"><JobDetail /></Protected>} />
+        <Route path="/import" element={<RoleRoute allow={canManage} menu="imp"><ImportWizard /></RoleRoute>} />
+        <Route path="/reports" element={<Protected menu="rep"><Reports /></Protected>} />
+        <Route path="/audit" element={<Protected menu="aud" feature="audit_log"><Audit /></Protected>} />
+        <Route path="/users" element={<RoleRoute allow={canManageUsers} menu="usr"><UsersPage /></RoleRoute>} />
+        <Route path="/settings" element={<RoleRoute allow={isAdmin} menu="set"><SettingsPage /></RoleRoute>} />
+        <Route path="/version-history" element={<RoleRoute allow={isAdmin} menu="set"><VersionHistory /></RoleRoute>} />
+        <Route path="/version-log" element={<Navigate to="/version-history" replace />} />
+        <Route path="/roles" element={<RoleRoute allow={isAdmin} menu="usr"><RoleProfiles /></RoleRoute>} />
+        <Route path="/trash" element={<RoleRoute allow={(user) => user?.role === "master_admin" || user?.role === "admin"}><Trash /></RoleRoute>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }
 

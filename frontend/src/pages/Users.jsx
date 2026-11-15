@@ -617,6 +617,43 @@ export default function UsersPage() {
     }
   };
 
+  const unlockAccount = async (target) => {
+    if (!isAdmin(user) || !canManageTarget(user, target)) return;
+    try {
+      await api.post(`/users/${target.id}/unlock`);
+      toast.success("Account unlocked");
+      load();
+    } catch (error) {
+      toast.error(formatApiError(error.response?.data?.detail) || "Unable to unlock account");
+    }
+  };
+
+  const requestPasswordReset = async (target) => {
+    if (!isAdmin(user) || !canManageTarget(user, target)) return;
+    try {
+      await api.post("/auth/password-reset/admin-request", { email: target.email });
+      toast.success("Password reset email requested");
+    } catch (error) {
+      toast.error(formatApiError(error.response?.data?.detail) || "Unable to request password reset");
+    }
+  };
+
+  const masterResetPassword = async (target) => {
+    if (!isMasterAdmin(user) || target.id === user.id) return;
+    const next = window.prompt(`Set a new password for ${target.name} (minimum 12 characters):`);
+    if (!next) return;
+    if (next.length < 12) { toast.error("Password must contain at least 12 characters"); return; }
+    const confirm = window.prompt("Confirm the new password:");
+    if (confirm !== next) { toast.error("Password confirmation does not match"); return; }
+    try {
+      const { data } = await api.post(`/users/${target.id}/master-reset-password`, { new_password: next });
+      toast.success(data.message || "Password changed and notification queued");
+      load();
+    } catch (error) {
+      toast.error(formatApiError(error.response?.data?.detail) || "Unable to change password");
+    }
+  };
+
   const masterSelected =
     form.role === "master_admin" &&
     !form.role_profile_id;
@@ -812,18 +849,22 @@ export default function UsersPage() {
                     </td>
 
                     <td className="px-4 py-3 text-right">
-                      {target.id !== user.id &&
-                        manageable &&
-                        !protectedOwner && (
-                          <button
-                            type="button"
-                            onClick={() => remove(target)}
-                            className="text-slate-400 hover:text-red-600"
-                            title="Delete user"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
+                      {target.id !== user.id && manageable && (
+                        <div className="inline-flex items-center gap-3">
+                          {target.locked && (
+                            <button type="button" onClick={() => unlockAccount(target)} className="text-amber-600 hover:text-emerald-700 text-xs font-semibold" title="Unlock account">Unlock</button>
+                          )}
+                          <button type="button" onClick={() => requestPasswordReset(target)} className="text-slate-600 hover:text-blue-700 text-xs font-semibold" title="Send password reset link">Request reset</button>
+                          {isMasterAdmin(user) && (
+                            <button type="button" onClick={() => masterResetPassword(target)} className="text-blue-600 hover:text-blue-800 text-xs font-semibold" title="Set password">Set password</button>
+                          )}
+                          {!protectedOwner && (
+                            <button type="button" onClick={() => remove(target)} className="text-slate-400 hover:text-red-600" title="Delete user">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );

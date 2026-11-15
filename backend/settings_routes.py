@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from zoneinfo import ZoneInfo
 
@@ -6,6 +7,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Request,
     Response,
     UploadFile,
 )
@@ -169,7 +171,7 @@ async def upload_app_logo(
 
 
 @router.get("/settings/app-logo")
-async def get_app_logo():
+async def get_app_logo(request: Request):
     await require_feature_enabled(
         "custom_branding"
     )
@@ -215,6 +217,15 @@ async def get_app_logo():
             ),
         )
 
+    etag = '"' + hashlib.sha256(data).hexdigest() + '"'
+    headers = {
+        "ETag": etag,
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
+        "X-Content-Type-Options": "nosniff",
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+
     return Response(
         content=data,
         media_type=(
@@ -223,14 +234,7 @@ async def get_app_logo():
             )
             or detected
         ),
-        headers={
-            "Cache-Control": (
-                "no-store, max-age=0"
-            ),
-            "X-Content-Type-Options": (
-                "nosniff"
-            ),
-        },
+        headers=headers,
     )
 
 

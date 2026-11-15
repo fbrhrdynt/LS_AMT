@@ -233,3 +233,30 @@ def check_smtp_connection_sync() -> None:
             smtp.ehlo()
         smtp.login(cfg["username"], cfg["password"])
         smtp.noop()
+
+
+async def send_master_password_changed_email(*, recipient: str, display_name: str, admin_name: str) -> None:
+    from html import escape
+    cfg = _smtp_config()
+    safe_name, safe_admin = escape(display_name or "AMT user"), escape(admin_name or "Master Admin")
+    msg = EmailMessage()
+    msg["Subject"] = "Your AMT password was changed by Master Admin"
+    msg["From"] = cfg["sender"]
+    msg["To"] = recipient
+    msg["Reply-To"] = cfg["reply_to"]
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain="logisourcedigital.web.id")
+    msg.set_content(
+        f"Hello {display_name or 'AMT user'}, your AMT password was changed by Master Admin {admin_name}. "
+        "All existing sessions have been signed out. If you did not expect this change, contact your administrator immediately."
+    )
+    msg.add_alternative(f"""<!doctype html><html><body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;padding:32px 12px">
+    <table role="presentation" style="max-width:600px;margin:auto;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:36px;width:100%">
+    <tr><td><div style="font-size:12px;font-weight:bold;letter-spacing:2px;color:#2563eb">LOGISOURCE DIGITAL · AMT</div>
+    <h1 style="font-size:24px">Your password was changed</h1>
+    <p>Hello {safe_name},</p><p>Your AMT account password was changed by <strong>{safe_admin}</strong> (Master Admin).</p>
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:24px 0">
+    <strong>Security notice</strong><p style="margin-bottom:0">All existing sessions have been signed out. Sign in again using the new password provided to you securely by your administrator.</p></div>
+    <p>If you did not expect this change, contact your administrator immediately. Do not share your password with anyone.</p>
+    <hr style="border:0;border-top:1px solid #e2e8f0;margin:28px 0"><p style="font-size:12px;color:#64748b">Automated security notification · LogiSource Digital</p></td></tr></table></body></html>""", subtype="html")
+    await asyncio.to_thread(_send_message_sync, msg)

@@ -1,0 +1,13 @@
+# AMT — Asset Maintenance Tracker
+
+AMT is an asset maintenance tracking application by LogiSource Digital.
+
+## Official websites
+
+- [AMT application](https://amt.logisourcedigital.web.id/)
+- [LogiSource Digital](https://logisourcedigital.web.id/)
+
+## Public resources
+
+- [AMT application sign-in](https://amt.logisourcedigital.web.id/)
+- [LogiSource Digital website](https://logisourcedigital.web.id/)

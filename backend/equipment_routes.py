@@ -39,7 +39,7 @@ class MoveBody(BaseModel):
 async def list_equipment(q: str = "", placement: str = "", status: str = "",
                          category: str = "", page: int = 1, page_size: int = 20,
                          user: dict = Depends(get_current_user)):
-    query = {}
+    query = {"deleted_at": None}
     if q:
         query["$or"] = [{"sap_no": rx(q)}, {"mfg_no": rx(q)}, {"name": rx(q)},
                         {"category": rx(q)}, {"manufacturer": rx(q)}]
@@ -164,36 +164,21 @@ class StatusBody(BaseModel):
 
 @router.delete("/equipment/{eid}")
 async def delete_equipment(eid: str, user: dict = Depends(MANAGE)):
-    eq = await db.equipment.find_one({"id": eid})
+    eq = await db.equipment.find_one({"id": eid, "deleted_at": None})
     if not eq:
         raise HTTPException(status_code=404, detail="Equipment not found")
     active = await db.assignments.find_one({"equipment_id": eid, "status": "Active"})
     if active or eq.get("current_job_id") or eq.get("placement") == "Job":
         raise HTTPException(status_code=400, detail="Equipment is on a Job; demobilize first")
-    history = {
-        "maintenance": await db.maintenance.count_documents({"equipment_id": eid}),
-        "failures": await db.failures.count_documents({"equipment_id": eid}),
-        "assignments": await db.assignments.count_documents({"equipment_id": eid}),
-        "documents": await db.files.count_documents({"equipment_id": eid}),
-        "inventory_transactions": await db.inventory_transactions.count_documents({"equipment_id": eid}),
-        "calibration_tools": await db.calibration_tools.count_documents(
-            {"equipment_id": eid, "is_deleted": {"$ne": True}}
-        ),
-    }
-    used = {k: v for k, v in history.items() if v}
-    if used:
-        detail = ", ".join(f"{k}={v}" for k, v in used.items())
-        raise HTTPException(status_code=400, detail=f"Equipment has operational history and cannot be hard-deleted ({detail})")
-    await db.location_history.delete_many({"equipment_id": eid})
-    result = await db.equipment.delete_one(
-        {"id": eid, "placement": {"$ne": "Job"}, "$or": [
-            {"current_job_id": None}, {"current_job_id": {"$exists": False}}
-        ]}
+    stamp = now_iso()
+    result = await db.equipment.update_one(
+        {"id": eid, "deleted_at": None},
+        {"$set": {"deleted_at": stamp, "deleted_by": user.get("id"), "deleted_by_name": user.get("name", ""), "updated_at": stamp}},
     )
-    if result.deleted_count != 1:
+    if result.modified_count != 1:
         raise HTTPException(status_code=409, detail="Equipment changed concurrently")
-    await audit_log("equipment", eid, "equipment.delete", user, f"Deleted unused equipment {eq['sap_no']}")
-    return {"ok": True}
+    await audit_log("equipment", eid, "equipment.soft_delete", user, f"Moved {eq.get('sap_no')} to Trash")
+    return {"ok": True, "deleted_at": stamp}
 
 
 @router.patch("/equipment/{eid}/status")

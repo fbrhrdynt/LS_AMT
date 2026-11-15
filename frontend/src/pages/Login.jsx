@@ -1,11 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { useAuth, formatApiError } from "@/context/AuthContext";
 import BrandLogo from "@/components/BrandLogo";
-
-const LOGIN_IMG = "https://images.unsplash.com/photo-1564182842834-681b7be6de4b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1Mjh8MHwxfHNlYXJjaHwzfHxpbmR1c3RyaWFsJTIwZXF1aXBtZW50JTIwbWFpbnRlbmFuY2V8ZW58MHx8fHwxNzg4MDgxNDY1fDA&ixlib=rb-4.1.0&q=85";
 
 export default function Login() {
   const { login } = useAuth();
@@ -13,6 +11,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -28,15 +27,14 @@ export default function Login() {
     }
   };
 
-
   return (
     <div className="flex min-h-screen">
-      <div className="hidden w-1/2 flex-col justify-between bg-slate-900 p-12 text-white lg:flex relative overflow-hidden">
-        <img src={LOGIN_IMG} alt="Industrial maintenance" className="absolute inset-0 h-full w-full object-cover opacity-30" />
+      <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-12 text-white lg:flex">
         <div className="relative z-10">
           <BrandLogo
             fallback="/amt-logo-tagline.png"
             alt="AMT — Asset Maintenance Tracker"
+            fetchPriority="high"
             className="h-24 max-w-[360px] w-auto rounded-lg bg-white/95 p-3 object-contain object-left"
           />
         </div>
@@ -47,12 +45,13 @@ export default function Login() {
         </div>
       </div>
 
-      <div className="flex w-full flex-col justify-center px-6 py-12 lg:w-1/2 sm:px-16">
+      <main className="flex w-full flex-col justify-center px-6 py-12 lg:w-1/2 sm:px-16">
         <div className="mx-auto w-full max-w-sm">
           <div className="mb-8 lg:hidden">
             <BrandLogo
               fallback="/amt-logo-tagline.png"
               alt="AMT — Asset Maintenance Tracker"
+              fetchPriority="high"
               className="h-16 max-w-[280px] w-auto object-contain object-left"
             />
           </div>
@@ -61,16 +60,22 @@ export default function Login() {
 
           <form onSubmit={submit} className="mt-8 space-y-4">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</label>
-              <input data-testid="login-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+              <label htmlFor="login-email" className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</label>
+              <input id="login-email" data-testid="login-email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)}
                 className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="you@company.com" />
             </div>
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Password</label>
-              <input data-testid="login-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="••••••••" />
+              <label htmlFor="login-password" className="text-xs font-semibold uppercase tracking-wide text-slate-500">Password</label>
+              <div className="relative mt-1">
+                <input id="login-password" data-testid="login-password" type={showPassword ? "text" : "password"} autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 pr-11 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="••••••••" />
+                <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((value) => !value)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-500 hover:text-slate-800">
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div className="flex justify-end">
               <Link
@@ -87,7 +92,7 @@ export default function Login() {
             </button>
           </form>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
