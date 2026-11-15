@@ -7,6 +7,25 @@
   },
   "versions": [
     {
+      "version": "1.5.1",
+      "status": "stable",
+      "title": "Security, User Administration & Platform Improvements",
+      "summary": "Consolidates the DEV-approved improvements since AMT 1.5.0, including account security controls, delegated user administration, calibration tracking, Trash recovery, and application performance and usability refinements.",
+      "changes": [
+        "Added login password visibility control.",
+        "Added account lockout after repeated failed login attempts, with Admin and Master Admin unlock controls.",
+        "Added Admin password-reset request workflow and Master Admin direct password-change controls, with session revocation and audit logging.",
+        "Expanded user administration with delegated hierarchy, custom role profiles, and per-user menu access controls.",
+        "Added and refined equipment calibration tracking and related exports.",
+        "Added Trash functionality for recoverable deleted records.",
+        "Improved maintenance, equipment, jobs, and settings workflows across the DEV-approved changes.",
+        "Improved responsive application layout, navigation, and mobile usability.",
+        "Applied frontend loading and performance refinements, including route loading and asset delivery improvements.",
+        "Added or refined public metadata and crawler-facing resources, including robots.txt, llms.txt, and the ARD endpoint.",
+        "No manual database migration is planned; application restart is required after update."
+      ]
+    },
+    {
       "version": "1.5.0",
       "status": "stable",
       "title": "Maintenance Supply Source Options",
